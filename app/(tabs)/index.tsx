@@ -37,6 +37,39 @@ export default function LibraryScreen() {
     ]);
   }
 
+  function showShowActions(show: string, list: Episode[]) {
+    const unwatched = list.filter((e) => !e.watched).length;
+    Alert.alert(show, `${list.length} downloaded episode${list.length === 1 ? '' : 's'}`, [
+      {
+        text: unwatched > 0 ? 'Mark all as watched' : 'Mark all as unwatched',
+        onPress: () => list.forEach((e) => updateEpisode(e.id, { watched: unwatched > 0 ? 1 : 0, positionSec: 0 })),
+      },
+      ...(list.length - unwatched > 0
+        ? [
+            {
+              text: `Delete ${list.length - unwatched} watched`,
+              style: 'destructive' as const,
+              onPress: () =>
+                Alert.alert('Delete watched episodes?', `${list.length - unwatched} video(s) will be removed from your phone.`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => list.filter((e) => e.watched).forEach((e) => remove(e.id)) },
+                ]),
+            },
+          ]
+        : []),
+      {
+        text: 'Delete whole show',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert(`Delete all of ${show}?`, `${list.length} video${list.length === 1 ? '' : 's'} will be removed from your phone.`, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => list.forEach((e) => remove(e.id)) },
+          ]),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   if (sections.length === 0) {
     return (
       <View style={styles.empty}>
@@ -54,9 +87,14 @@ export default function LibraryScreen() {
       keyExtractor={(e) => String(e.id)}
       contentInsetAdjustmentBehavior="automatic"
       renderSectionHeader={({ section }) => (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-        </View>
+        <Pressable onLongPress={() => showShowActions(section.title, section.data)}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <Text style={[styles.sectionMeta, { color: colors.muted }]}>
+              {section.data.length} episode{section.data.length === 1 ? '' : 's'}
+            </Text>
+          </View>
+        </Pressable>
       )}
       renderItem={({ item }) => {
         const fraction = item.durationSec > 0 ? Math.min(1, item.positionSec / item.durationSec) : 0;
@@ -94,7 +132,8 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { fontSize: 20, fontWeight: '600', marginBottom: 8 },
   emptyBody: { fontSize: 15, textAlign: 'center', lineHeight: 21 },
-  sectionHeader: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
+  sectionMeta: { fontSize: 13 },
   sectionTitle: { fontSize: 18, fontWeight: '700' },
   row: { marginHorizontal: 16, marginBottom: 8, borderRadius: 10, overflow: 'hidden' },
   rowInner: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 12 },
