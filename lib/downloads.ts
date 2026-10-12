@@ -43,6 +43,8 @@ export type NewDownload = {
   title: string;
   pageUrl?: string | null;
   referer?: string | null;
+  /** Stream quality cap; defaults to the Settings choice. */
+  maxHeight?: number;
 };
 
 function headersFor(referer: string | null | undefined) {
@@ -67,7 +69,7 @@ export function enqueue(d: NewDownload) {
     pageUrl: d.pageUrl ?? null,
     headersJson: JSON.stringify(headers),
     kind: d.kind,
-    maxHeight: d.kind === 'hls' ? getStreamQuality() : null,
+    maxHeight: d.kind === 'hls' ? (d.maxHeight ?? getStreamQuality()) : null,
   });
   pump();
   return id;
