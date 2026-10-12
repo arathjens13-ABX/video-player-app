@@ -21,13 +21,15 @@ const hasFfmpeg = spawnSync('ffprobe', ['-version']).status === 0;
 
 function fixtureFetch(opts: { fail?: (url: string) => boolean; transform?: (url: string, b: Uint8Array) => Uint8Array } = {}) {
   const calls: string[] = [];
-  const fetchBytes: FetchBytes = async (url, _headers, signal) => {
+  const fetchBytes: FetchBytes = async (url, headers, signal) => {
     if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
     calls.push(url);
     if (opts.fail?.(url)) throw new Error('network down');
     const file = path.join(FIXTURES, new URL(url).pathname);
     if (!fs.existsSync(file)) throw new Error('HTTP 404');
-    const bytes = new Uint8Array(fs.readFileSync(file));
+    let bytes = new Uint8Array(fs.readFileSync(file));
+    const range = headers.Range?.match(/^bytes=(\d+)-(\d+)$/);
+    if (range) bytes = bytes.slice(Number(range[1]), Number(range[2]) + 1);
     return opts.transform ? opts.transform(url, bytes) : bytes;
   };
   const fetchText = async (url: string) => new TextDecoder().decode(await fetchBytes(url, {}));
@@ -81,6 +83,36 @@ test('fMP4 stream with separate audio is combined in sync', { skip: !hasFfmpeg &
   // ffmpeg wrote both renditions starting at 0; the output must keep them aligned.
   for (const s of streams) assert.ok(Math.abs(Number(s.start_time)) < 0.03, `${s.codec_type} starts at ${s.start_time}`);
   assert.ok(decodesCleanly(out));
+});
+
+test('byte-range streams (one file, pieces as ranges) work', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const { plan, out, duration } = await download(BASE + 'ts-ranges/index.m3u8');
+  assert.deepEqual(
+    plan.streams[0].segments.map((p) => p.range),
+    [
+      { offset: 0, length: 50008 },
+      { offset: 50008, length: 51136 },
+      { offset: 101144, length: 50948 },
+    ]
+  );
+  assert.ok(Math.abs(duration - 6) < 0.2, `duration ${duration}`);
+  assert.deepEqual(probe(out).map((s) => s.codec_type).sort(), ['audio', 'video']);
+  assert.ok(decodesCleanly(out));
+});
+
+test('streams that switch format midway are refused rather than saved broken', async () => {
+  const playlist = [
+    '#EXTM3U',
+    '#EXT-X-MAP:URI="init-a.mp4"',
+    '#EXTINF:2,',
+    'a0.m4s',
+    '#EXT-X-DISCONTINUITY',
+    '#EXT-X-MAP:URI="init-ad.mp4"',
+    '#EXTINF:2,',
+    'ad0.m4s',
+    '#EXT-X-ENDLIST',
+  ].join('\n');
+  await assert.rejects(planStream('https://x/a.m3u8', async () => playlist), /changes format/);
 });
 
 test('an interrupted download resumes without refetching finished pieces', async () => {

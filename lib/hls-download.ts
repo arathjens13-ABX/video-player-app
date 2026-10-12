@@ -89,6 +89,11 @@ export async function planStream(
     throw new Error('This stream is DRM-protected and can’t be downloaded');
   }
 
+  const maps = new Set(playlist.segments.map((s) => s.map?.url));
+  if (maps.size > 1) {
+    // Usually ads spliced into the stream with their own encoding; one MP4 can't hold both.
+    throw new Error('This stream changes format partway through (often inserted ads), which the app can’t save yet');
+  }
   const format = playlist.segments[0]?.map ? 'fmp4' : 'ts';
   const streams = [partsFor(audioUrl ? 'video' : 'main', playlist.segments)];
   if (audioUrl) {
