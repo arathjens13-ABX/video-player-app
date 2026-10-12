@@ -1,4 +1,5 @@
 import { Directory, DownloadTask, File, Paths, type DownloadPauseState } from 'expo-file-system';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import {
   deleteEpisodeRow,
@@ -10,10 +11,14 @@ import {
   type DownloadKind,
   type Episode,
 } from './db';
+import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir } from './fs-io';
+import { assemble, downloadParts, planStream } from './hls-download';
 import { sniffVideo, type SniffResult } from './sniff';
 import { USER_AGENT } from './ua';
 
 const MAX_CONCURRENT = 2;
+const MAX_STREAM_HEIGHT = 1080;
+const KEEP_AWAKE_TAG = 'vidstash-downloads';
 const DB_PROGRESS_INTERVAL_MS = 1000;
 
 
@@ -23,7 +28,7 @@ export function videoFile(episode: Pick<Episode, 'fileName'>) {
   return new File(videosDir, episode.fileName);
 }
 
-const active = new Map<number, DownloadTask>();
+const active = new Map<number, Job>();
 const lastDbWrite = new Map<number, number>();
 // Ids being removed, so their cancellation isn't recorded as an error.
 const removing = new Set<number>();
@@ -70,20 +75,35 @@ function pump() {
   }
 }
 
-function start(episode: Episode) {
-  if (episode.kind !== 'mp4') {
-    updateEpisode(episode.id, {
-      status: 'error',
-      error: 'Streaming (HLS) downloads are not supported yet.',
-    });
-    return;
-  }
+/** A running download, whichever kind. */
+type Job = { pause(): void; cancel(): void };
 
+function start(episode: Episode) {
+  updateEpisode(episode.id, { status: 'downloading', error: null });
+  const job = episode.kind === 'hls' ? startStream(episode) : startFile(episode);
+  active.set(episode.id, job);
+  updateKeepAwake();
+}
+
+function finished(id: number) {
+  active.delete(id);
+  lastDbWrite.delete(id);
+  updateKeepAwake();
+  pump();
+}
+
+function failed(id: number, err: unknown, patch: Partial<Episode> = {}) {
+  if (removing.has(id)) return;
+  const message = err instanceof Error ? err.message : String(err);
+  updateEpisode(id, { status: 'error', error: message, ...patch });
+}
+
+function startFile(episode: Episode): Job {
   videosDir.create({ idempotent: true, intermediates: true });
   const options = {
     headers: JSON.parse(episode.headersJson) as Record<string, string>,
     onProgress: ({ bytesWritten, totalBytes }: { bytesWritten: number; totalBytes: number }) =>
-      onProgress(episode.id, bytesWritten, totalBytes),
+      onProgress(episode.id, { bytesWritten, totalBytes }),
   };
 
   let task: DownloadTask;
@@ -97,9 +117,6 @@ function start(episode: Episode) {
     task = File.createDownloadTask(episode.sourceUrl, destination, options);
     run = () => task.downloadAsync();
   }
-
-  active.set(episode.id, task);
-  updateEpisode(episode.id, { status: 'downloading', error: null });
 
   run()
     .then((file) => {
@@ -132,18 +149,83 @@ function start(episode: Episode) {
         updateEpisode(episode.id, { status: 'paused', resumeJson });
       }
     })
-    .catch((err: unknown) => {
-      if (removing.has(episode.id)) return;
-      const message = err instanceof Error ? err.message : String(err);
-      // A failed resume usually means stale resume data; drop it so a retry starts fresh.
-      updateEpisode(episode.id, { status: 'error', error: message, resumeJson: null });
-    })
+    // A failed resume usually means stale resume data; drop it so a retry starts fresh.
+    .catch((err: unknown) => failed(episode.id, err, { resumeJson: null }))
     .finally(() => {
-      active.delete(episode.id);
-      lastDbWrite.delete(episode.id);
       task.release();
-      pump();
+      finished(episode.id);
     });
+
+  return { pause: () => task.pause(), cancel: () => task.cancel() };
+}
+
+/**
+ * Streams download piece by piece into a parts folder, then get assembled into
+ * one MP4. Pieces already on disk are kept, so pausing (or the app being
+ * closed) loses at most the pieces in flight.
+ */
+function startStream(episode: Episode): Job {
+  const controller = new AbortController();
+  let pausing = false;
+  const headers = JSON.parse(episode.headersJson) as Record<string, string>;
+  const store = new FilePartStore(partsDir(episode.id));
+
+  (async () => {
+    const plan = await planStream(episode.sourceUrl, fetchText(headers, controller.signal), MAX_STREAM_HEIGHT);
+    await downloadParts(plan, store, fetchBytes, headers, {
+      concurrency: 4,
+      signal: controller.signal,
+      onProgress: ({ done, total, bytes }) =>
+        onProgress(episode.id, { bytesWritten: bytes, totalBytes: -1, fraction: done / total, note: `${done} of ${total} pieces` }),
+    });
+    if (controller.signal.aborted) return;
+
+    videosDir.create({ idempotent: true, intermediates: true });
+    const sink = new FileSink(videoFile(episode));
+    let duration: number;
+    try {
+      duration = await assemble(plan, store, sink, (f) =>
+        onProgress(episode.id, { bytesWritten: sink.position, totalBytes: -1, fraction: f, note: 'Finishing…' })
+      );
+    } finally {
+      sink.close();
+    }
+    const size = videoFile(episode).size ?? 0;
+    updateEpisode(episode.id, { status: 'done', bytesWritten: size, totalBytes: size, durationSec: duration });
+    deleteParts(episode.id);
+  })()
+    .catch((err: unknown) => {
+      if (pausing) updateEpisode(episode.id, { status: 'paused' });
+      else failed(episode.id, err);
+    })
+    .finally(() => finished(episode.id));
+
+  return {
+    pause: () => {
+      pausing = true;
+      controller.abort();
+    },
+    cancel: () => controller.abort(),
+  };
+}
+
+function deleteParts(id: number) {
+  try {
+    const dir = partsDir(id);
+    if (dir.exists) dir.delete();
+  } catch {
+    // Leftover parts only cost space; Settings shows usage.
+  }
+}
+
+// Stream downloads run in JavaScript, which iOS pauses when the screen locks; keep it on while they run.
+let keepingAwake = false;
+function updateKeepAwake() {
+  const needed = [...active.keys()].some((id) => getEpisode(id)?.kind === 'hls');
+  if (needed === keepingAwake) return;
+  keepingAwake = needed;
+  if (needed) activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+  else deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
 }
 
 function checkDownloadedFile(file: File): SniffResult {
@@ -161,7 +243,13 @@ function checkDownloadedFile(file: File): SniffResult {
 }
 
 // Live progress lives in memory so the UI can update often without hammering SQLite.
-export type Progress = { bytesWritten: number; totalBytes: number };
+export type Progress = {
+  bytesWritten: number;
+  totalBytes: number;
+  /** 0..1 when known some other way than bytes (stream downloads count pieces). */
+  fraction?: number;
+  note?: string;
+};
 const progress = new Map<number, Progress>();
 const progressListeners = new Set<() => void>();
 
@@ -176,13 +264,13 @@ export function subscribeProgress(listener: () => void) {
   };
 }
 
-function onProgress(id: number, bytesWritten: number, totalBytes: number) {
-  progress.set(id, { bytesWritten, totalBytes });
+function onProgress(id: number, p: Progress) {
+  progress.set(id, p);
   progressListeners.forEach((l) => l());
   const now = Date.now();
   if (now - (lastDbWrite.get(id) ?? 0) > DB_PROGRESS_INTERVAL_MS) {
     lastDbWrite.set(id, now);
-    updateEpisode(id, { bytesWritten, totalBytes }, { silent: true });
+    updateEpisode(id, { bytesWritten: p.bytesWritten, totalBytes: p.totalBytes }, { silent: true });
   }
 }
 
@@ -216,6 +304,7 @@ export function remove(id: number) {
       // The row still goes; a leftover file is cleaned up with the videos folder.
     }
   }
+  deleteParts(id);
   progress.delete(id);
   deleteEpisodeRow(id);
   setTimeout(() => removing.delete(id), 5000);

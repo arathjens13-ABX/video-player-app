@@ -56,7 +56,7 @@ export default function EpisodeForm() {
         options={{
           title: existing ? 'Edit details' : 'New download',
           headerRight: () => (
-            <Pressable onPress={save} hitSlop={10} disabled={isStream} style={{ opacity: isStream ? 0.3 : 1 }}>
+            <Pressable onPress={save} hitSlop={10}>
               <Text style={{ color: colors.tint, fontSize: 17, fontWeight: '600' }}>
                 {existing ? 'Save' : 'Download'}
               </Text>
@@ -71,8 +71,8 @@ export default function EpisodeForm() {
       ) : null}
       {isStream ? (
         <Text style={[styles.notice, { backgroundColor: colors.card }]}>
-          This video is a stream (it arrives in many small pieces). Downloading streams is coming in the next update;
-          for now, try another server that offers an MP4.
+          This video is a stream, so it downloads in many small pieces and is then put together into one file. Keep
+          VidStash open until it finishes (the screen stays on). If you leave, it picks up where it stopped.
         </Text>
       ) : null}
 

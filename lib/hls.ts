@@ -6,7 +6,11 @@ export type Variant = {
   width?: number;
   height?: number;
   codecs?: string;
+  /** GROUP-ID of the separate audio rendition this variant plays with, if any. */
+  audioGroup?: string;
 };
+
+export type AudioRendition = { groupId: string; url?: string; isDefault: boolean; name?: string; language?: string };
 
 export type Key = { method: 'NONE' | 'AES-128' | 'SAMPLE-AES' | string; url?: string; iv?: string };
 
@@ -21,7 +25,7 @@ export type Segment = {
   sequence: number;
 };
 
-export type MasterPlaylist = { type: 'master'; variants: Variant[] };
+export type MasterPlaylist = { type: 'master'; variants: Variant[]; audio: AudioRendition[] };
 export type MediaPlaylist = { type: 'media'; segments: Segment[]; duration: number; ended: boolean };
 export type Playlist = MasterPlaylist | MediaPlaylist;
 
@@ -48,6 +52,19 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
 
   if (lines.some((l) => l.startsWith('#EXT-X-STREAM-INF'))) {
     const variants: Variant[] = [];
+    const audio: AudioRendition[] = [];
+    for (const line of lines) {
+      if (!line.startsWith('#EXT-X-MEDIA:')) continue;
+      const a = parseAttributes(line.slice('#EXT-X-MEDIA:'.length));
+      if (a.TYPE !== 'AUDIO') continue;
+      audio.push({
+        groupId: a['GROUP-ID'],
+        url: a.URI ? resolve(a.URI, baseUrl) : undefined,
+        isDefault: a.DEFAULT === 'YES',
+        name: a.NAME,
+        language: a.LANGUAGE,
+      });
+    }
     for (let i = 0; i < lines.length; i++) {
       if (!lines[i].startsWith('#EXT-X-STREAM-INF:')) continue;
       const attrs = parseAttributes(lines[i].slice('#EXT-X-STREAM-INF:'.length));
@@ -61,9 +78,10 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
         width: w || undefined,
         height: h || undefined,
         codecs: attrs.CODECS,
+        audioGroup: attrs.AUDIO,
       });
     }
-    return { type: 'master', variants };
+    return { type: 'master', variants, audio };
   }
 
   const segments: Segment[] = [];
@@ -104,6 +122,13 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
     }
   }
   return { type: 'media', segments, duration, ended };
+}
+
+/** The separate audio playlist a variant needs, preferring the default rendition. */
+export function audioFor(master: MasterPlaylist, variant: Variant): AudioRendition | undefined {
+  if (!variant.audioGroup) return undefined;
+  const group = master.audio.filter((a) => a.groupId === variant.audioGroup && a.url);
+  return group.find((a) => a.isDefault) ?? group[0];
 }
 
 /** Picks the highest quality variant, optionally capped at a maximum height. */

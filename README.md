@@ -13,7 +13,7 @@ Download videos to your phone and watch them offline. It runs on iPhone and Andr
 - Player: resumes where you left off, Picture-in-Picture, background audio, AirPlay. Episodes count as watched at 90%.
 - On iPhone, downloaded files also appear in the Files app (On My iPhone › VidStash).
 
-Not yet: downloading **streams** (`.m3u8`). The browser finds them and shows their length and quality, but downloading them is the next milestone. Until then, pick a server that offers an MP4.
+- **Streams (`.m3u8`)** download too: up to 1080p, AES-128 encrypted streams included, plus streams whose audio is separate (Dailymotion). Pieces download four at a time and are put together into a normal MP4 that plays and seeks offline. Keep the app open while a stream downloads (the screen stays on). If you leave or it gets closed, it picks up from the last finished piece.
 
 ### How the main animexin mirrors behave
 
@@ -21,9 +21,9 @@ Tested from a cloud server with Chromium, not yet on a phone:
 
 | Mirror | Found as | Notes |
 |---|---|---|
-| Dailymotion | Stream | Video and audio are separate streams, so the stream downloader has to combine them |
+| Dailymotion | Stream | Video and audio are separate streams; the app combines them (tested end to end) |
 | ok.ru | Stream | Link is tied to your IP address; switching Wi-Fi ↔ cellular mid-download will break it |
-| d.tube | Stream | 1080p/720p/360p |
+| d.tube | Stream | 1080p/720p/360p (tested end to end) |
 | Odysee | MP4 | Refused requests from the cloud server; needs a phone test |
 | Rumble, Dood (playmogo) | ? | Cloudflare blocked the cloud server; needs a phone test |
 | Streamwish (seekplayer) | ? | Player stalls behind a Google ad in headless Chrome; needs a phone test |
@@ -56,7 +56,7 @@ To update: download the new `.ipa` and install it the same way. Your library and
 npm install
 npm run typecheck
 npm run lint
-npm test              # needs Chromium: npx playwright install chromium
+npm test              # needs Chromium (npx playwright install chromium) and ffmpeg
 npx expo start        # dev server
 ```
 
@@ -70,5 +70,6 @@ Layout:
 - `lib/links.ts`: link detection and show/episode name guessing.
 - `lib/detector.ts`: the script injected into web pages to find videos and mirror servers.
 - `lib/probe.ts`, `lib/hls.ts`: checking found links; HLS playlist parsing.
+- `lib/hls-download.ts`: stream downloads (plan → download pieces → assemble). `lib/mp4/`: MP4 box tools and the fragmented-to-regular MP4 writer. `lib/fs-io.ts`: the app's storage for both.
 - `tests/`: `npm test` runs unit tests plus detector tests in headless Chromium against offline fixture pages.
 - `.github/workflows/build.yml`: CI that builds the APK and IPA and publishes the release.

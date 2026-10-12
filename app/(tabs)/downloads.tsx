@@ -35,13 +35,6 @@ export default function DownloadsScreen() {
       router.navigate('/browser');
       return;
     }
-    if (kind === 'hls') {
-      Alert.alert(
-        'Streaming links aren’t supported yet',
-        'This is an .m3u8 stream (the video comes in many small pieces). Support for these is coming in a later update.'
-      );
-      return;
-    }
     setInput('');
     router.push({ pathname: '/episode-form', params: { url, kind } });
   }
@@ -84,7 +77,9 @@ export default function DownloadsScreen() {
         </View>
       }
       ListEmptyComponent={
-        <Text style={[styles.empty, { color: colors.muted }]}>No downloads in progress.</Text>
+        <Text style={[styles.empty, { color: colors.muted }]}>
+          No downloads in progress.{'\n'}Stream downloads need the app open; the screen stays on while they run.
+        </Text>
       }
       renderItem={({ item }) => <DownloadRow episode={item} />}
     />
@@ -93,12 +88,16 @@ export default function DownloadsScreen() {
 
 function DownloadRow({ episode }: { episode: Episode }) {
   const colors = useColors();
-  const { bytesWritten, totalBytes } = useProgress(episode);
-  const fraction = totalBytes > 0 ? bytesWritten / totalBytes : 0;
+  const { bytesWritten, totalBytes, fraction: knownFraction, note } = useProgress(episode);
+  const fraction = knownFraction ?? (totalBytes > 0 ? bytesWritten / totalBytes : 0);
 
   const statusText = {
     queued: 'Waiting…',
-    downloading: totalBytes > 0 ? `${formatBytes(bytesWritten)} of ${formatBytes(totalBytes)}` : formatBytes(bytesWritten),
+    downloading: note
+      ? `${note} · ${formatBytes(bytesWritten)}`
+      : totalBytes > 0
+        ? `${formatBytes(bytesWritten)} of ${formatBytes(totalBytes)}`
+        : formatBytes(bytesWritten),
     paused: `Paused · ${formatBytes(bytesWritten)}`,
     error: episode.error ?? 'Failed',
     done: 'Done',
