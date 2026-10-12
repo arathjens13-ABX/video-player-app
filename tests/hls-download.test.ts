@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { allParts, assemble, downloadParts, planStream, type FetchBytes } from '../lib/hls-download';
+import { allParts, assemble, downloadParts, partsSize, planStream, type FetchBytes } from '../lib/hls-download';
 import { DirStore, FileSink } from './support/node-io';
 
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -162,4 +162,34 @@ test('live streams and DRM are refused up front', async () => {
   await assert.rejects(planStream('https://x/live.m3u8', async () => live), /live stream/);
   const drm = '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://x"\n#EXTINF:2,\na.ts\n#EXT-X-ENDLIST\n';
   await assert.rejects(planStream('https://x/drm.m3u8', async () => drm), /DRM/);
+});
+
+test('assembly can consume parts as it goes, and stops when cancelled', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const io = fixtureFetch();
+  const dir = tempDir();
+  const plan = await planStream(BASE + 'fmp4-split/master.m3u8', io.fetchText);
+  const store = new DirStore(path.join(dir, 'parts'));
+  await downloadParts(plan, store, io.fetchBytes, {});
+  assert.ok(partsSize(plan, store) > 0);
+  assert.ok(plan.estimatedBytes && plan.estimatedBytes > 0);
+
+  // Cancel partway: assembly stops, and the parts not yet used are still there.
+  const controller = new AbortController();
+  const sink1 = new FileSink(path.join(dir, 'a.mp4'));
+  await assert.rejects(
+    assemble(plan, store, sink1, { consumeParts: true, signal: controller.signal, onProgress: (f) => f > 0.3 && controller.abort() }),
+    (e: Error) => e.name === 'AbortError'
+  );
+  sink1.close();
+  const left = allParts(plan).filter((p) => store.has(p.name)).length;
+  assert.ok(left > 0 && left < allParts(plan).length, `left ${left}`);
+
+  // Resuming re-downloads what was consumed, then a full assembly leaves no parts behind.
+  await downloadParts(plan, store, io.fetchBytes, {});
+  const out = path.join(dir, 'b.mp4');
+  const sink2 = new FileSink(out);
+  await assemble(plan, store, sink2, { consumeParts: true });
+  sink2.close();
+  assert.equal(allParts(plan).filter((p) => store.has(p.name)).length, 0);
+  assert.ok(decodesCleanly(out));
 });

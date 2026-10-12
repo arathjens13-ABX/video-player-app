@@ -30,6 +30,15 @@ export class FilePartStore implements PartStore {
   read(name: string) {
     return new File(this.dir, name).bytesSync();
   }
+
+  remove(name: string) {
+    const file = new File(this.dir, name);
+    if (file.exists) file.delete();
+  }
+
+  size(name: string) {
+    return new File(this.dir, name).size ?? 0;
+  }
 }
 
 export class FileSink implements OutputSink {

@@ -22,6 +22,8 @@ export interface PartStore {
   has(name: string): boolean;
   write(name: string, bytes: Uint8Array): void;
   read(name: string): Uint8Array;
+  remove(name: string): void;
+  size(name: string): number;
 }
 
 type Part = {
@@ -39,6 +41,8 @@ export type StreamPlan = {
   format: 'fmp4' | 'ts';
   duration: number;
   height?: number;
+  /** Rough size from the advertised bitrate, when the playlist gives one. */
+  estimatedBytes?: number;
 };
 
 function abortError() {
@@ -76,10 +80,12 @@ export async function planStream(
   let playlist = parsePlaylist(await fetchText(url), url);
   let audioUrl: string | undefined;
   let height: number | undefined;
+  let bandwidth: number | undefined;
   if (playlist.type === 'master') {
     const variant = pickVariant(playlist.variants, maxHeight);
     if (!variant) throw new Error('The stream has no playable versions');
     height = variant.height;
+    bandwidth = variant.bandwidth || undefined;
     audioUrl = audioFor(playlist, variant)?.url;
     playlist = parsePlaylist(await fetchText(variant.url), variant.url);
   }
@@ -104,7 +110,8 @@ export async function planStream(
     }
     streams.push(partsFor('audio', audio.segments));
   }
-  return { streams, format, duration: playlist.duration, height };
+  const estimatedBytes = bandwidth ? Math.round((bandwidth / 8) * playlist.duration) : undefined;
+  return { streams, format, duration: playlist.duration, height, estimatedBytes };
 }
 
 export function allParts(plan: StreamPlan): Part[] {
@@ -222,43 +229,67 @@ export async function downloadParts(
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+/** Bytes the downloaded parts take up: roughly the size the finished MP4 will be. */
+export function partsSize(plan: StreamPlan, store: PartStore) {
+  return allParts(plan).reduce((n, p) => n + (store.has(p.name) ? store.size(p.name) : 0), 0);
+}
+
+export type AssembleOptions = {
+  onProgress?: (fraction: number) => void;
+  signal?: AbortSignal;
+  /**
+   * Delete each part once it is in the MP4, so a download needs about 1x its
+   * size in free space instead of 2x. Parts deleted before an interruption are
+   * simply downloaded again.
+   */
+  consumeParts?: boolean;
+};
+
 /**
  * Writes the downloaded parts into one MP4. Returns its duration in seconds.
  * Yields between segments so the app stays responsive while it works.
  */
-export async function assemble(
-  plan: StreamPlan,
-  store: PartStore,
-  sink: OutputSink,
-  onProgress?: (fraction: number) => void
-): Promise<number> {
+export async function assemble(plan: StreamPlan, store: PartStore, sink: OutputSink, opts: AssembleOptions = {}): Promise<number> {
   const writer = new FlatMp4Writer(sink);
   const longest = Math.max(...plan.streams.map((s) => s.segments.length));
+  const take = (name: string) => store.read(name);
+  const done = (name: string) => {
+    if (opts.consumeParts) store.remove(name);
+  };
+  const step = async (i: number) => {
+    opts.onProgress?.((i + 1) / longest);
+    await tick();
+    if (opts.signal?.aborted) throw abortError();
+  };
 
   if (plan.format === 'ts') {
     const [main] = plan.streams;
     const tm = new TsToFmp4();
     for (let i = 0; i < main.segments.length; i++) {
-      for (const out of tm.push(store.read(main.segments[i].name))) {
+      const name = main.segments[i].name;
+      for (const out of tm.push(take(name))) {
         writer.addInit('main', out.init);
         writer.addFragments('main', out.data);
       }
-      onProgress?.((i + 1) / longest);
-      await tick();
+      done(name);
+      await step(i);
     }
   } else {
     for (const s of plan.streams) {
       if (!s.init) throw new Error('Stream is missing its init section');
-      writer.addInit(s.stream, store.read(s.init.name));
+      writer.addInit(s.stream, take(s.init.name));
     }
     // Interleave the streams segment by segment so audio and video stay close together in the file.
     for (let i = 0; i < longest; i++) {
       for (const s of plan.streams) {
-        if (i < s.segments.length) writer.addFragments(s.stream, store.read(s.segments[i].name));
+        if (i >= s.segments.length) continue;
+        const name = s.segments[i].name;
+        writer.addFragments(s.stream, take(name));
+        done(name);
       }
-      onProgress?.((i + 1) / longest);
-      await tick();
+      await step(i);
     }
+    for (const s of plan.streams) if (s.init) done(s.init.name);
   }
   return writer.finish();
 }

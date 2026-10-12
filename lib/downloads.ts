@@ -12,7 +12,8 @@ import {
   type Episode,
 } from './db';
 import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir } from './fs-io';
-import { assemble, downloadParts, planStream } from './hls-download';
+import { formatBytes } from './format';
+import { assemble, downloadParts, partsSize, planStream } from './hls-download';
 import { sniffVideo, type SniffResult } from './sniff';
 import { USER_AGENT } from './ua';
 
@@ -172,6 +173,11 @@ function startStream(episode: Episode): Job {
 
   (async () => {
     const plan = await planStream(episode.sourceUrl, fetchText(headers, controller.signal), MAX_STREAM_HEIGHT);
+    const free = freeSpace();
+    const remaining = (plan.estimatedBytes ?? 0) - partsSize(plan, store);
+    if (free !== null && remaining > 0 && free < remaining + 100e6) {
+      throw new Error(`Not enough free space: this video needs about ${formatBytes(remaining)} more`);
+    }
     await downloadParts(plan, store, fetchBytes, headers, {
       concurrency: 4,
       signal: controller.signal,
@@ -180,16 +186,34 @@ function startStream(episode: Episode): Job {
     });
     if (controller.signal.aborted) return;
 
+    // Parts are deleted as they go into the MP4, so finishing only needs a little headroom.
+    const headroom = partsSize(plan, store) * 0.15 + 50e6;
+    const freeNow = freeSpace();
+    if (freeNow !== null && freeNow < headroom) {
+      throw new Error(`Not enough free space to finish: free up about ${formatBytes(headroom - freeNow)}`);
+    }
+
     videosDir.create({ idempotent: true, intermediates: true });
     const sink = new FileSink(videoFile(episode));
     let duration: number;
     try {
-      duration = await assemble(plan, store, sink, (f) =>
-        onProgress(episode.id, { bytesWritten: sink.position, totalBytes: -1, fraction: f, note: 'Finishing…' })
-      );
-    } finally {
+      duration = await assemble(plan, store, sink, {
+        signal: controller.signal,
+        consumeParts: true,
+        onProgress: (f) =>
+          onProgress(episode.id, { bytesWritten: sink.position, totalBytes: -1, fraction: f, note: 'Finishing…' }),
+      });
+    } catch (e) {
       sink.close();
+      // A half-written MP4 is useless; the parts left over are what resuming needs.
+      try {
+        videoFile(episode).delete();
+      } catch {
+        // Already gone.
+      }
+      throw e;
     }
+    sink.close();
     const size = videoFile(episode).size ?? 0;
     updateEpisode(episode.id, { status: 'done', bytesWritten: size, totalBytes: size, durationSec: duration });
     deleteParts(episode.id);
@@ -207,6 +231,14 @@ function startStream(episode: Episode): Job {
     },
     cancel: () => controller.abort(),
   };
+}
+
+function freeSpace(): number | null {
+  try {
+    return Paths.availableDiskSpace;
+  } catch {
+    return null;
+  }
 }
 
 function deleteParts(id: number) {

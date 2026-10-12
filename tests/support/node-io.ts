@@ -22,6 +22,12 @@ export class DirStore implements PartStore {
   read(name: string) {
     return new Uint8Array(fs.readFileSync(path.join(this.dir, name)));
   }
+  remove(name: string) {
+    fs.rmSync(path.join(this.dir, name), { force: true });
+  }
+  size(name: string) {
+    return fs.statSync(path.join(this.dir, name)).size;
+  }
 }
 
 export class FileSink implements OutputSink {
