@@ -1,5 +1,7 @@
 /** Minimal HLS (.m3u8) parsing: enough to pick a quality, total the duration and list segments. */
 
+import { URL } from './url';
+
 export type Variant = {
   url: string;
   bandwidth: number;

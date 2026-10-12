@@ -15,6 +15,7 @@ import { audioFor, parsePlaylist, pickVariant, type Segment } from './hls';
 import { readBoxes } from './mp4/boxes';
 import { FlatMp4Writer, type OutputSink } from './mp4/flatten';
 import { TsToFmp4 } from './mp4/transmux';
+import { URL } from './url';
 
 export type FetchBytes = (url: string, headers: Record<string, string>, signal?: AbortSignal) => Promise<Uint8Array>;
 

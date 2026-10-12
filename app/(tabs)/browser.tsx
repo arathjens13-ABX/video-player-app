@@ -16,6 +16,7 @@ import { onOpenInBrowser, type BrowserRequest } from '@/lib/open-in-browser';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
 import { loadRecent, rememberVisit, type RecentSite } from '@/lib/recent';
 import { USER_AGENT } from '@/lib/ua';
+import { URL } from '@/lib/url';
 
 const SUGGESTED: RecentSite[] = [{ url: 'https://animexin.dev/', title: 'AnimeXin' }];
 

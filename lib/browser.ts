@@ -1,4 +1,5 @@
 import { normalizeUrl } from './links';
+import { URL } from './url';
 
 /** "www.animexin.dev" -> "animexin.dev". Good enough for telling sites apart; not public-suffix aware. */
 export function baseDomain(host: string): string {

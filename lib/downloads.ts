@@ -18,6 +18,7 @@ import { getStreamQuality } from './settings';
 import { deleteThumbnail, ensureThumbnail, thumbsDir } from './thumbs';
 import { sniffVideo, type SniffResult } from './sniff';
 import { USER_AGENT } from './ua';
+import { URL } from './url';
 
 const MAX_CONCURRENT = 2;
 const MAX_STREAM_HEIGHT = 1080;

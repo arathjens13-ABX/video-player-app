@@ -1,4 +1,5 @@
 import { describeStream, type StreamInfo } from './hls';
+import { URL } from './url';
 
 export type Candidate = {
   url: string;

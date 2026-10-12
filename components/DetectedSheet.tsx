@@ -7,6 +7,7 @@ import { probeStatus, subscribeProbes } from '@/lib/probe-store';
 
 import { Text, View } from './Themed';
 import { useColors } from './useColors';
+import { URL } from '@/lib/url';
 
 export type Server = { label: string; url: string };
 

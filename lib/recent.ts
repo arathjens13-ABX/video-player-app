@@ -1,6 +1,7 @@
 import Storage from 'expo-sqlite/kv-store';
 
 import { sameSite } from './browser';
+import { URL } from './url';
 
 export type RecentSite = { url: string; title: string };
 const RECENT_KEY = 'browser.recent';

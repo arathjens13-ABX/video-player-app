@@ -1,3 +1,5 @@
+import { URL } from './url';
+
 export type LinkKind = 'mp4' | 'hls' | 'page';
 
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv)(?:$|[?#])/i;
