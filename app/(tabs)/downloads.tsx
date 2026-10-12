@@ -6,10 +6,12 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput } 
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import type { Episode } from '@/lib/db';
-import { DEFAULT_USER_AGENT, pause, remove, resume, retry } from '@/lib/downloads';
+import { pause, remove, resume, retry } from '@/lib/downloads';
 import { formatBytes } from '@/lib/format';
 import { useEpisodes, useProgress } from '@/lib/hooks';
 import { classifyLink, normalizeUrl } from '@/lib/links';
+import { requestOpenInBrowser } from '@/lib/open-in-browser';
+import { USER_AGENT } from '@/lib/ua';
 
 export default function DownloadsScreen() {
   const colors = useColors();
@@ -24,13 +26,13 @@ export default function DownloadsScreen() {
       return;
     }
     setChecking(true);
-    const kind = await classifyLink(url, { 'User-Agent': DEFAULT_USER_AGENT });
+    const kind = await classifyLink(url, { 'User-Agent': USER_AGENT });
     setChecking(false);
     if (kind === 'page') {
-      Alert.alert(
-        'This is a web page, not a video file',
-        'Finding the video inside a page needs the in-app browser, which is coming in the next update. For now, paste a direct .mp4 link.'
-      );
+      // A web page: open it in the browser so the video inside can be found.
+      setInput('');
+      requestOpenInBrowser(url);
+      router.navigate('/browser');
       return;
     }
     if (kind === 'hls') {

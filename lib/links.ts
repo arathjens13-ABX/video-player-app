@@ -43,6 +43,14 @@ export async function classifyLink(url: string, headers: Record<string, string>)
   }
 }
 
+function safeDecode(s: string) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 function titleCase(s: string) {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -55,21 +63,26 @@ export function guessNames(source: string): { show: string; title: string } {
   let text = source;
   try {
     const url = new URL(source);
-    const segments = url.pathname.split('/').filter(Boolean);
-    text = decodeURIComponent(segments[segments.length - 1] ?? url.hostname);
+    const last = url.pathname.split('/').filter(Boolean).pop();
+    if (!last) return { show: 'Unsorted', title: url.hostname };
+    text = safeDecode(last).replace(/\.[a-z0-9]{2,4}$/i, '');
   } catch {
     // Not a URL; treat it as a page title.
   }
   text = text
-    .replace(/\.[a-z0-9]{2,4}$/i, '')
+    .replace(/%[0-9a-f]{0,2}/gi, ' ')
     .replace(/[-_.+]+/g, ' ')
     .replace(/\b(english|indonesian|eng|indo)?\s*sub(title)?s?\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  const match = text.match(/^(.*?)\s*\b(?:episode|ep|e)\s*(\d+(?:\.\d+)?)\b/i);
-  if (match && match[1].trim()) {
-    return { show: titleCase(match[1].trim()), title: `Episode ${match[2]}` };
+  // Most specific marker first, so "E0" inside other text isn't mistaken for an episode.
+  const patterns = [/^(.*?)\s*\bepisode\s*(\d+)\b/i, /^(.*?)\s*\bep\s*(\d+)\b/i, /^(.*?)\s+e(\d+)\b/i];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1].trim()) {
+      return { show: titleCase(match[1].trim()), title: `Episode ${match[2]}` };
+    }
   }
   return { show: 'Unsorted', title: titleCase(text) || 'Untitled' };
 }

@@ -4,13 +4,30 @@ Download videos to your phone and watch them offline. It runs on iPhone and Andr
 
 ## What works now
 
-- Paste a direct video link (`.mp4`, `.m4v`, `.mov`, `.webm`), or any link the server reports as a video file. Name the show and episode, then download.
-- Download queue: two downloads at a time, progress, pause/resume, retry, remove. On iPhone, downloads keep going when you leave the app.
-- Library grouped by show. Tap to play, long-press to rename, mark as watched, or delete.
+- **Browser tab:** browse to an episode and press play. The app watches what the page's player loads (inside embedded players too, on iPhone) and lights up a **"⬇ N videos found"** button. Each find is checked first (length, quality, size), so ads and dead links are hidden.
+- **Servers:** on sites with a mirror picker (like animexin), the same button lists every server. Tapping one switches the page's player to it.
+- **Blocks ad redirects and pop-ups**, with an "Open anyway" button.
+- **Downloads tab:** paste a direct video link (`.mp4`, `.m4v`, `.mov`, `.webm`) to download it, or paste an episode page link to open it in the browser.
+- Download queue: two at a time, progress, pause/resume, retry, remove. On iPhone, downloads keep going when you leave the app. Finished files are checked, so an error page saved as `.mp4` shows up as a failed download.
+- Library grouped by show. Tap to play; long-press to rename, mark as watched, or delete.
 - Player: resumes where you left off, Picture-in-Picture, background audio, AirPlay. Episodes count as watched at 90%.
 - On iPhone, downloaded files also appear in the Files app (On My iPhone › VidStash).
 
-Coming next: the in-app browser that finds the video on a page (milestone 3), then streaming `.m3u8` downloads (milestone 4).
+Not yet: downloading **streams** (`.m3u8`). The browser finds them and shows their length and quality, but downloading them is the next milestone. Until then, pick a server that offers an MP4.
+
+### How the main animexin mirrors behave
+
+Tested from a cloud server with Chromium, not yet on a phone:
+
+| Mirror | Found as | Notes |
+|---|---|---|
+| Dailymotion | Stream | Video and audio are separate streams, so the stream downloader has to combine them |
+| ok.ru | Stream | Link is tied to your IP address; switching Wi-Fi ↔ cellular mid-download will break it |
+| d.tube | Stream | 1080p/720p/360p |
+| Odysee | MP4 | Refused requests from the cloud server; needs a phone test |
+| Rumble, Dood (playmogo) | ? | Cloudflare blocked the cloud server; needs a phone test |
+| Streamwish (seekplayer) | ? | Player stalls behind a Google ad in headless Chrome; needs a phone test |
+| Mega | ✗ | Decrypts inside the page, so it can't be captured |
 
 ## Getting the app
 
@@ -39,6 +56,7 @@ To update: download the new `.ipa` and install it the same way. Your library and
 npm install
 npm run typecheck
 npm run lint
+npm test              # needs Chromium: npx playwright install chromium
 npx expo start        # dev server
 ```
 
@@ -50,4 +68,7 @@ Layout:
 - `lib/db.ts`: SQLite schema and queries.
 - `lib/downloads.ts`: download queue.
 - `lib/links.ts`: link detection and show/episode name guessing.
+- `lib/detector.ts`: the script injected into web pages to find videos and mirror servers.
+- `lib/probe.ts`, `lib/hls.ts`: checking found links; HLS playlist parsing.
+- `tests/`: `npm test` runs unit tests plus detector tests in headless Chromium against offline fixture pages.
 - `.github/workflows/build.yml`: CI that builds the APK and IPA and publishes the release.

@@ -21,6 +21,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
 
   android:
     needs: check
@@ -39,7 +41,8 @@ jobs:
       - run: npm ci
       - run: npx expo prebuild --platform android --no-install
       # Release build signed with the debug key: fine for installing on your own phone.
-      - run: ./gradlew assembleRelease --no-daemon
+      # arm64 only: every phone from the last several years, and a much faster build.
+      - run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
         working-directory: android
       - run: cp android/app/build/outputs/apk/release/app-release.apk VidStash.apk
       - uses: actions/upload-artifact@v4

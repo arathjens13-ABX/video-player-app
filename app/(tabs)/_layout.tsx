@@ -30,6 +30,7 @@ export default function TabLayout() {
         name="browser"
         options={{
           title: 'Browser',
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <TabIcon name={{ ios: 'globe', android: 'public', web: 'public' }} color={color} />
           ),

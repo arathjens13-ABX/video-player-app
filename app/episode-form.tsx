@@ -13,14 +13,22 @@ import { guessNames } from '@/lib/links';
  * an existing episode's show name and title.
  */
 export default function EpisodeForm() {
-  const params = useLocalSearchParams<{ id?: string; url?: string; kind?: DownloadKind }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    url?: string;
+    kind?: DownloadKind;
+    referer?: string;
+    pageTitle?: string;
+    pageUrl?: string;
+  }>();
   const colors = useColors();
   const existing = params.id ? getEpisode(Number(params.id)) : null;
-  const guessed = params.url ? guessNames(params.url) : null;
+  const guessed = params.url ? bestGuess([params.pageTitle, params.pageUrl, params.url]) : null;
+  const isStream = !existing && params.kind === 'hls';
 
   const [show, setShow] = useState(existing?.show ?? guessed?.show ?? '');
   const [title, setTitle] = useState(existing?.title ?? guessed?.title ?? '');
-  const [referer, setReferer] = useState('');
+  const [referer, setReferer] = useState(params.referer ?? '');
 
   function save() {
     const cleanShow = show.trim() || 'Unsorted';
@@ -34,6 +42,7 @@ export default function EpisodeForm() {
         show: cleanShow,
         title: cleanTitle,
         referer: referer.trim() || null,
+        pageUrl: params.pageUrl ?? null,
       });
     }
     router.back();
@@ -47,7 +56,7 @@ export default function EpisodeForm() {
         options={{
           title: existing ? 'Edit details' : 'New download',
           headerRight: () => (
-            <Pressable onPress={save} hitSlop={10}>
+            <Pressable onPress={save} hitSlop={10} disabled={isStream} style={{ opacity: isStream ? 0.3 : 1 }}>
               <Text style={{ color: colors.tint, fontSize: 17, fontWeight: '600' }}>
                 {existing ? 'Save' : 'Download'}
               </Text>
@@ -58,6 +67,12 @@ export default function EpisodeForm() {
       {params.url ? (
         <Text style={[styles.url, { color: colors.muted }]} numberOfLines={3}>
           {params.url}
+        </Text>
+      ) : null}
+      {isStream ? (
+        <Text style={[styles.notice, { backgroundColor: colors.card }]}>
+          This video is a stream (it arrives in many small pieces). Downloading streams is coming in the next update;
+          for now, try another server that offers an MP4.
         </Text>
       ) : null}
 
@@ -90,10 +105,23 @@ export default function EpisodeForm() {
   );
 }
 
+/** Uses the first source that yields a real show name (page title, then page URL, then the video URL). */
+function bestGuess(sources: (string | undefined)[]) {
+  let fallback: ReturnType<typeof guessNames> | null = null;
+  for (const source of sources) {
+    if (!source) continue;
+    const guess = guessNames(source);
+    if (guess.show !== 'Unsorted') return guess;
+    fallback ??= guess;
+  }
+  return fallback ?? { show: 'Unsorted', title: 'Untitled' };
+}
+
 const styles = StyleSheet.create({
   container: { padding: 16 },
   url: { fontSize: 13, marginBottom: 8 },
   label: { fontSize: 14, fontWeight: '600', marginTop: 16, marginBottom: 6 },
   input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, padding: 12, fontSize: 16 },
+  notice: { fontSize: 14, lineHeight: 20, padding: 12, borderRadius: 10, overflow: 'hidden', marginTop: 8 },
   hint: { fontSize: 13, marginTop: 6, lineHeight: 18 },
 });

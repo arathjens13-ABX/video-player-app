@@ -10,12 +10,12 @@ import {
   type DownloadKind,
   type Episode,
 } from './db';
+import { sniffVideo, type SniffResult } from './sniff';
+import { USER_AGENT } from './ua';
 
 const MAX_CONCURRENT = 2;
 const DB_PROGRESS_INTERVAL_MS = 1000;
 
-export const DEFAULT_USER_AGENT =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 
 export const videosDir = new Directory(Paths.document, 'videos');
 
@@ -38,7 +38,7 @@ export type NewDownload = {
 };
 
 export function enqueue(d: NewDownload) {
-  const headers: Record<string, string> = { 'User-Agent': DEFAULT_USER_AGENT };
+  const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
   if (d.referer) {
     headers.Referer = d.referer;
     try {
@@ -104,6 +104,16 @@ function start(episode: Episode) {
   run()
     .then((file) => {
       if (file) {
+        const check = checkDownloadedFile(file);
+        if (!check.ok) {
+          try {
+            file.delete();
+          } catch {
+            // Leaving the bad file is harmless; it is overwritten on retry.
+          }
+          updateEpisode(episode.id, { status: 'error', error: check.reason, resumeJson: null, bytesWritten: 0 });
+          return;
+        }
         const size = file.size ?? 0;
         updateEpisode(episode.id, {
           status: 'done',
@@ -134,6 +144,20 @@ function start(episode: Episode) {
       task.release();
       pump();
     });
+}
+
+function checkDownloadedFile(file: File): SniffResult {
+  try {
+    const handle = file.open();
+    try {
+      return sniffVideo(handle.readBytes(64));
+    } finally {
+      handle.close();
+    }
+  } catch {
+    // Can't read it back; let the player be the judge.
+    return { ok: true };
+  }
 }
 
 // Live progress lives in memory so the UI can update often without hammering SQLite.
