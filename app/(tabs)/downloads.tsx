@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput } from 'react-native';
 
@@ -9,6 +10,7 @@ import { pause, remove, resume, retry } from '@/lib/downloads';
 import { formatBytes } from '@/lib/format';
 import { useEpisodes, useProgress } from '@/lib/hooks';
 import { extractUrl } from '@/lib/links';
+import { requestOpenInBrowser } from '@/lib/open-in-browser';
 import { routeLink } from '@/lib/route-link';
 
 export default function DownloadsScreen() {
@@ -112,6 +114,15 @@ function DownloadRow({ episode }: { episode: Episode }) {
       <View style={styles.rowButtons} lightColor="transparent" darkColor="transparent">
         {episode.status === 'downloading' ? <Button title="Pause" onPress={() => pause(episode.id)} /> : null}
         {episode.status === 'paused' ? <Button title="Resume" onPress={() => resume(episode.id)} /> : null}
+        {episode.status === 'error' && episode.pageUrl ? (
+          <Button
+            title="Find again"
+            onPress={() => {
+              requestOpenInBrowser(episode.pageUrl!, { episodeId: episode.id, title: `${episode.show} · ${episode.title}` });
+              router.navigate('/browser');
+            }}
+          />
+        ) : null}
         {episode.status === 'error' ? <Button title="Retry" onPress={() => retry(episode.id)} /> : null}
         <Button title="Remove" onPress={() => remove(episode.id)} danger />
       </View>

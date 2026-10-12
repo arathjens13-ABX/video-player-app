@@ -45,16 +45,21 @@ export type NewDownload = {
   referer?: string | null;
 };
 
-export function enqueue(d: NewDownload) {
+function headersFor(referer: string | null | undefined) {
   const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
-  if (d.referer) {
-    headers.Referer = d.referer;
+  if (referer) {
+    headers.Referer = referer;
     try {
-      headers.Origin = new URL(d.referer).origin;
+      headers.Origin = new URL(referer).origin;
     } catch {
       // Ignore a malformed referer; the Referer header alone is still sent.
     }
   }
+  return headers;
+}
+
+export function enqueue(d: NewDownload) {
+  const headers = headersFor(d.referer);
   const id = insertEpisode({
     show: d.show,
     title: d.title,
@@ -66,6 +71,31 @@ export function enqueue(d: NewDownload) {
   });
   pump();
   return id;
+}
+
+/**
+ * Points an existing download at a freshly found link (the old one expired or
+ * stopped working) and queues it again, keeping its name and place.
+ */
+export function relink(id: number, d: { url: string; kind: DownloadKind; referer?: string | null }) {
+  const job = active.get(id);
+  if (job) {
+    removing.add(id); // its cancellation isn't an error
+    job.cancel();
+    setTimeout(() => removing.delete(id), 5000);
+  }
+  progress.delete(id);
+  updateEpisode(id, {
+    sourceUrl: d.url,
+    kind: d.kind,
+    headersJson: JSON.stringify(headersFor(d.referer)),
+    status: 'queued',
+    error: null,
+    resumeJson: null,
+    bytesWritten: 0,
+  });
+  // Let a cancelled job wind down before the new one starts.
+  setTimeout(pump, job ? 300 : 0);
 }
 
 function pump() {
@@ -98,8 +128,19 @@ function finished(id: number) {
 
 function failed(id: number, err: unknown, patch: Partial<Episode> = {}) {
   if (removing.has(id)) return;
+  updateEpisode(id, { status: 'error', error: explainError(err), ...patch });
+}
+
+/** Turns low-level failures into something actionable. */
+export function explainError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
-  updateEpisode(id, { status: 'error', error: message, ...patch });
+  if (/\b(401|403|404|410)\b/.test(message)) {
+    return `${message}. The link has probably expired (they only last a few hours on many sites). Use Find again.`;
+  }
+  if (/network|offline|internet|timed out|timeout/i.test(message)) {
+    return `${message}. Check your connection, then Retry.`;
+  }
+  return message;
 }
 
 function startFile(episode: Episode): Job {

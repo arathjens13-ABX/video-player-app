@@ -11,7 +11,8 @@ import { useColors } from '@/components/useColors';
 import { addressToUrl, sameSite, shouldBlockNavigation } from '@/lib/browser';
 import { DETECTOR_JS, switchServerJs } from '@/lib/detector';
 import { candidateKey, type Candidate } from '@/lib/probe';
-import { onOpenInBrowser } from '@/lib/open-in-browser';
+import { relink } from '@/lib/downloads';
+import { onOpenInBrowser, type BrowserRequest } from '@/lib/open-in-browser';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
 import { loadRecent, rememberVisit, type RecentSite } from '@/lib/recent';
 import { USER_AGENT } from '@/lib/ua';
@@ -42,6 +43,8 @@ export default function BrowserScreen() {
   const allowOnce = useRef<string | null>(null);
   const sourceUri = useRef<string | null>(null);
 
+  const [relinking, setRelinking] = useState<BrowserRequest['relink'] | null>(null);
+
   const open = useCallback((url: string) => {
     userTyped.current = true;
     setCandidates([]);
@@ -63,7 +66,14 @@ export default function BrowserScreen() {
   useEffect(() => subscribeProbes(() => setProbeTick((n) => n + 1)), []);
 
   // Links handed over from elsewhere in the app (e.g. pasted in Downloads).
-  useEffect(() => onOpenInBrowser(open), [open]);
+  useEffect(
+    () =>
+      onOpenInBrowser((req) => {
+        setRelinking(req.relink ?? null);
+        open(req.url);
+      }),
+    [open]
+  );
 
   function submitAddress() {
     const url = addressToUrl(address);
@@ -132,6 +142,12 @@ export default function BrowserScreen() {
 
   function download(c: Candidate) {
     setSheetOpen(false);
+    if (relinking) {
+      relink(relinking.episodeId, { url: c.url, kind: c.kind === 'hls' ? 'hls' : 'mp4', referer: c.frame });
+      setRelinking(null);
+      router.navigate('/downloads');
+      return;
+    }
     router.push({
       pathname: '/episode-form',
       params: {
@@ -176,6 +192,17 @@ export default function BrowserScreen() {
           </Pressable>
         ) : null}
       </View>
+
+      {relinking ? (
+        <View style={[styles.banner, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <Text style={styles.bannerText} numberOfLines={2}>
+            Finding a new link for “{relinking.title}”. Press play, then download it from the button below.
+          </Text>
+          <Pressable onPress={() => setRelinking(null)} hitSlop={8}>
+            <Text style={[styles.bannerAction, { color: colors.muted }]}>Cancel</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {blocked ? (
         <View style={[styles.banner, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
