@@ -1,0 +1,108 @@
+name: Build apps
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npx expo prebuild --platform android --no-install
+      # Release build signed with the debug key: fine for installing on your own phone.
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: android
+      - run: cp android/app/build/outputs/apk/release/app-release.apk VidStash.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VidStash-android
+          path: VidStash.apk
+
+  ios:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: xcodebuild -version
+      - run: npm ci
+      - run: npx expo prebuild --platform ios
+      # Unsigned build: SideStore / AltStore sign it with your own Apple ID when installing.
+      - name: Build unsigned app
+        run: |
+          WORKSPACE=$(ls -d ios/*.xcworkspace | head -1)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tail -n 200
+      - name: Package .ipa
+        run: |
+          APP=$(ls -d build/Build/Products/Release-iphoneos/*.app | head -1)
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qr VidStash.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VidStash-ios
+          path: VidStash.ipa
+
+  # Every push to main refreshes a "latest" release so the newest builds have a stable download link.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest VidStash.apk VidStash.ipa \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "Latest build" \
+            --notes "Built from ${{ github.sha }}. Install VidStash.ipa with SideStore (iPhone) or VidStash.apk directly (Android)."

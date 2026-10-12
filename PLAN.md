@@ -72,8 +72,8 @@ On Android: GitHub Actions builds an APK and you install it directly.
 
 ## Milestones
 
-1. **Skeleton:** Expo app with tabs, SQLite, CI that builds an Android APK and an unsigned iOS IPA. *Done when: it installs and launches on your phone.*
-2. **Direct downloads:** paste an `.mp4` URL → queue → progress → plays offline. *Done when: an MP4 plays in airplane mode.*
+1. ✅ **Skeleton:** Expo app with tabs, SQLite, CI that builds an Android APK and an unsigned iOS IPA. *Done when: it installs and launches on your phone.*
+2. ✅ **Direct downloads:** paste an `.mp4` URL → queue → progress → plays offline. *Done when: an MP4 plays in airplane mode.*
 3. **Browser + detection:** in-app browser with the detection script; a "N videos found" button. *Done when: an animexin episode is detected.*
 4. **HLS:** segment downloader, AES-128, conversion to MP4, quality picker. *Done when: an HLS episode plays offline.*
 5. **Library + player polish:** grouping by show, resume, watched state, storage screen.
