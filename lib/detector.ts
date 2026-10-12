@@ -172,6 +172,16 @@ export const DETECTOR_JS = String.raw`
     return m ? m[1] : null;
   }
 
+  // Link shorteners and ad networks that sit in iframes but never play the episode.
+  var NOT_PLAYERS = /(^|\.)(t\.co|bit\.ly|doubleclick\.net|googlesyndication\.com|googleadservices\.com|adnxs\.com|facebook\.com|twitter\.com|x\.com|disqus\.com)$/i;
+
+  function isMirrorPicker(option) {
+    var select = option.closest && option.closest('select');
+    if (!select) return false;
+    var hint = (select.className + ' ' + select.name + ' ' + select.id + ' ' + (select.getAttribute('aria-label') || '')).toLowerCase();
+    return /mirror|server|player|source|embed/.test(hint);
+  }
+
   var lastServers = '';
   function collectServers() {
     var servers = [];
@@ -182,7 +192,8 @@ export const DETECTOR_JS = String.raw`
       urls[url] = true;
       servers.push({ label: (label || '').replace(/\s+/g, ' ').trim() || new URL(url).hostname, url: url });
     }
-    // Mirror pickers: <option value="base64 of an <iframe> tag">Server name</option>
+    // Mirror pickers: <option value="base64 of an <iframe> tag">Server name</option>,
+    // or (another theme) <select class="mirror"><option value="https://site/episode/v/2/">.
     var options = document.querySelectorAll('option[value]');
     for (var i = 0; i < options.length; i++) {
       var v = options[i].value;
@@ -190,13 +201,19 @@ export const DETECTOR_JS = String.raw`
       var html = /^[A-Za-z0-9+\/=\s]+$/.test(v) ? decodeBase64(v) : v;
       var src = html && srcFromHtml(html);
       if (src) add(options[i].textContent, src);
+      else if (/^https?:\/\//i.test(v) && isMirrorPicker(options[i])) add(options[i].textContent, v);
     }
+    // The page's current player: the biggest iframe, if it looks like one.
+    var best = null, bestArea = 0;
     var frames = document.querySelectorAll('iframe[src]');
     for (var j = 0; j < frames.length; j++) {
-      var f = frames[j];
-      var r = f.getBoundingClientRect();
-      if (r.width < 120 || r.height < 80) continue; // skip hidden and ad-sized frames
-      add('Current player · ' + (absolute(f.src) ? new URL(absolute(f.src)).hostname : ''), f.src);
+      var r = frames[j].getBoundingClientRect();
+      if (r.width < 200 || r.height < 110) continue; // hidden and ad-sized frames
+      if (r.width * r.height > bestArea) { bestArea = r.width * r.height; best = frames[j]; }
+    }
+    var bestUrl = best && absolute(best.src);
+    if (bestUrl && !NOT_PLAYERS.test(new URL(bestUrl).hostname)) {
+      add('Current player · ' + new URL(bestUrl).hostname, best.src);
     }
     var json = JSON.stringify(servers);
     if (json !== lastServers) {
@@ -269,10 +286,13 @@ export function switchServerJs(url: string): string {
     });
     return best;
   }
+  var pageLink = false;
   var options = document.querySelectorAll('option[value]');
   for (var i = 0; i < options.length; i++) {
     var opt = options[i];
-    if (opt.value && opt.value.length >= 20 && srcOf(opt.value) === target) {
+    if (opt.value && opt.value.length >= 20 && (srcOf(opt.value) === target || abs(opt.value) === target)) {
+      // A plain page link: the site navigates there itself, so there's no iframe to fix up afterwards.
+      pageLink = srcOf(opt.value) !== target;
       var select = opt.closest('select');
       if (select) {
         select.value = opt.value;
@@ -283,6 +303,7 @@ export function switchServerJs(url: string): string {
     }
   }
   setTimeout(function () {
+    if (pageLink) return;
     var already = Array.prototype.some.call(document.querySelectorAll('iframe'), function (f) { return abs(f.src) === target; });
     if (!already) {
       var f = biggestFrame();

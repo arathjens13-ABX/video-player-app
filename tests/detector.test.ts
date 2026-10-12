@@ -152,3 +152,41 @@ test('switching server falls back to replacing the player iframe', async () => {
   assert.equal(src, 'https://player.test/embed/not-in-list');
   await page.context().close();
 });
+
+const PLAIN_MIRRORS = `<!doctype html><html><head><title>Jade Dynasty Episode 10 English Sub</title></head><body>
+<select class="mirror" name="mirror" onchange="window.picked = this.value">
+  <option value="">Select Video Server</option>
+  <option value="https://site2.test/jade-dynasty-episode-10/v/1/">[4K] Eng [Dailymotion]</option>
+  <option value="https://site2.test/jade-dynasty-episode-10/v/2/">[4K] Eng [OK.RU]</option>
+</select>
+<select name="sort"><option value="https://site2.test/a-very-long-sorting-link/">Newest</option></select>
+<iframe src="https://t.co/abcdef" width="400" height="300"></iframe>
+</body></html>`;
+
+test('plain-URL mirror pickers are listed and t.co frames are not', async () => {
+  const context = await browser.newContext();
+  const msgs: Msg[] = [];
+  await context.exposeBinding('__vsReport', (_src, s: string) => {
+    msgs.push(JSON.parse(s));
+  });
+  await context.addInitScript(
+    'window.webkit={messageHandlers:{ReactNativeWebView:{postMessage:function(s){window.__vsReport(s)}}}};'
+  );
+  await context.addInitScript(DETECTOR_JS);
+  await context.route('**/*', (route) =>
+    new URL(route.request().url()).host === 'site2.test'
+      ? route.fulfill({ status: 200, contentType: 'text/html', body: PLAIN_MIRRORS })
+      : route.fulfill({ status: 204, body: '' })
+  );
+  const page = await context.newPage();
+  await page.goto('https://site2.test/jade-dynasty-episode-10/');
+  await page.waitForTimeout(1200);
+  const servers = msgs.filter((m) => m.type === 'servers').pop()?.servers ?? [];
+  assert.deepEqual(servers.map((s) => s.label), ['[4K] Eng [Dailymotion]', '[4K] Eng [OK.RU]']);
+
+  // Switching uses the site's own picker (its onchange handler runs).
+  await page.evaluate(switchServerJs('https://site2.test/jade-dynasty-episode-10/v/2/'));
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => (window as unknown as { picked?: string }).picked), 'https://site2.test/jade-dynasty-episode-10/v/2/');
+  await context.close();
+});

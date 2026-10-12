@@ -23,12 +23,16 @@ Tested from a cloud server with Chromium, not yet on a phone:
 | Mirror | Found as | Notes |
 |---|---|---|
 | Dailymotion | Stream | Video and audio are separate streams; the app combines them (tested end to end) |
-| ok.ru | Stream | Link is tied to your IP address; switching Wi-Fi ↔ cellular mid-download will break it |
+| ok.ru | Stream | Tested end to end. Link is tied to your IP address; switching Wi-Fi ↔ cellular mid-download will break it |
 | d.tube | Stream | 1080p/720p/360p (tested end to end) |
 | Odysee | MP4 | Refused requests from the cloud server; needs a phone test |
 | Rumble, Dood (playmogo) | ? | Cloudflare blocked the cloud server; needs a phone test |
 | Streamwish (seekplayer) | ? | Player stalls behind a Google ad in headless Chrome; needs a phone test |
 | Mega | ✗ | Decrypts inside the page, so it can't be captured |
+| Vidara (animekhor) | Stream | Detected |
+| Bysekoze / upns / p2pstream (animekhor) | ? | Domain-locked or unreachable from the cloud server; needs a phone test |
+
+Other sites checked with the same detector: **donghuastream.org**, **luciferdonghua.in** and **animekhor.org** all list their servers and their Dailymotion streams are found. luciferdonghua's ok.ru server was tested end to end. All four sites use the same WordPress theme, so other sites built on it should work too.
 
 ## Getting the app
 
