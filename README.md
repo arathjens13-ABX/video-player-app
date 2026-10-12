@@ -45,15 +45,7 @@ The repo is private, so open the Releases page in Safari while signed in to GitH
 
 ### iPhone install (free, with SideStore)
 
-One-time setup needs your Windows PC:
-
-1. Set up **SideStore** on the iPhone by following the official guide at <https://docs.sidestore.io>. It walks through installing SideStore from Windows and creating the pairing file.
-2. On the iPhone, download `VidStash.ipa` from the Latest build release (Safari → Releases → tap the file → it saves to Files).
-3. In SideStore: **My Apps → +** → choose `VidStash.ipa`.
-
-A free Apple ID signs apps for 7 days. SideStore refreshes them from the phone, so open SideStore every few days (or let its background refresh run). Free accounts can have up to 3 sideloaded apps active at once, and SideStore counts as one.
-
-To update: download the new `.ipa` and install it the same way. Your library and downloads are kept.
+See **[USER_GUIDE.md](USER_GUIDE.md)** for step-by-step setup (SideStore with iloader + LocalDevVPN, installing VidStash, first download, the 7-day refresh, troubleshooting).
 
 ## Send links from anywhere (Share → VidStash)
 

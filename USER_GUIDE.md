@@ -1,0 +1,143 @@
+# VidStash: Getting Started
+
+This guide takes you from nothing to watching your first downloaded episode offline. It's written for an **iPhone** and a **Windows PC**.
+
+There are three parts:
+
+1. **Set up SideStore** (one time, about 20–30 minutes). SideStore lets you install apps that aren't on the App Store, using your free Apple account.
+2. **Install VidStash** (about 2 minutes).
+3. **Download and watch an episode.**
+
+---
+
+## What you need
+
+- Your iPhone (iOS 15 or newer) with a passcode set.
+- Your Windows PC (64-bit; nearly all are).
+- A **USB cable** for the iPhone.
+- Your **Apple account** (Apple ID) email and password.
+- **Wi-Fi**. SideStore needs Wi-Fi, not mobile data, to install and refresh apps.
+
+---
+
+## Part 1: Set up SideStore (one time)
+
+### On your iPhone
+
+1. Open the **App Store** and install **LocalDevVPN** (free).
+2. Open LocalDevVPN and tap **Connect**. If asked to "Allow VPN Configurations", tap **Allow** and enter your passcode.
+   - This VPN only lets SideStore talk to your phone. It doesn't route your internet anywhere. It needs to be connected whenever you install or refresh apps in SideStore.
+
+### On your Windows PC
+
+3. Install **iTunes**. Apple's own download from apple.com works best; the Microsoft Store version is the fallback.
+4. Download and install **iloader**. Get it from the link on SideStore's official page: <https://docs.sidestore.io/docs/installation/prerequisites> (choose the Windows **MSI** installer).
+5. Plug your iPhone into the PC with the USB cable. If the iPhone asks "Trust This Computer?", tap **Trust** and enter your passcode.
+6. Open **iloader** and sign in with your Apple account. The password is case-sensitive.
+7. Select your iPhone, then click **Install SideStore (Stable)**. Wait for it to finish.
+
+### Back on your iPhone
+
+8. Open **Settings → General → VPN & Device Management**. Under "Developer App", tap your Apple account and then **Trust**.
+   - On iOS 18 the button says **Allow & Restart**. Tap it and enter your passcode.
+9. On iOS 16 or newer: go to **Settings → Privacy & Security**, scroll to the bottom, and turn on **Developer Mode**. The phone restarts.
+10. Open **LocalDevVPN** and tap **Connect**.
+11. Open **SideStore** and sign in with the same Apple account you used in iloader.
+12. Go to **My Apps** and tap the **7 DAYS** button next to SideStore to finish setting it up. If it asks about a signing certificate, tap **Yes** / **Refresh Now**.
+
+SideStore is ready. You won't need the PC again unless something goes badly wrong.
+
+> If you get stuck in Part 1, SideStore's own guide has screenshots and a troubleshooting page: <https://docs.sidestore.io>
+
+---
+
+## Part 2: Install VidStash
+
+1. On your iPhone, open **Safari** and sign in to **GitHub** (the repo is private, so you must be signed in).
+2. Go to your repo's **Releases** page: `github.com/arathjens13-ABX/video-player-app/releases`
+3. Under **Latest build**, tap **VidStash.ipa** to download it. It saves to the Files app (Downloads).
+4. Make sure **LocalDevVPN is connected** and you're on **Wi-Fi**.
+5. Open **SideStore → My Apps → +** (top left), then pick **VidStash.ipa** from Downloads.
+6. Wait for it to install. **VidStash** appears on your home screen.
+
+---
+
+## Part 3: Download your first episode
+
+1. Open **VidStash** and go to the **Browser** tab.
+2. Tap **AnimeXin** (or type an address at the top) and open an **episode page**.
+3. **Press play** on the video in the page. Ads may play first; let them, or skip them.
+4. Watch the button at the bottom. When it turns blue and says **"⬇ 1 video found"**, tap it.
+5. Each video found shows its **length** and **quality**. Tap **Download** on the one that looks like the full episode (around 15–25 minutes, not a 30-second ad).
+6. Check the **Show** and **Episode** names (usually filled in for you), pick a **Quality** if it's a stream, and tap **Download** at the top right.
+7. Go to the **Downloads** tab to watch progress.
+   - Some videos are **streams** that come in many small pieces ("120 of 460 pieces"). **Keep VidStash open** until these finish. The screen stays on by itself. If you leave, the download picks up where it stopped next time you open the app.
+   - **MP4** downloads keep going even if you leave the app.
+
+### If no video is found
+
+- Tap the bottom button anyway. It lists the page's **Servers** (Dailymotion, ok.ru, Rumble…). Tap a different one, press play again, and wait for "video found".
+- On AnimeXin, **Dailymotion**, **ok.ru** and **Dtube** are the most likely to work. **Mega** never works (it scrambles the video inside the page).
+
+### If a download fails
+
+- **Retry** tries again.
+- **Find again** reopens the episode page. Press play, then download the video again, and it replaces the broken link on the same download. Use this when the error mentions an expired link or 403. Many sites' links only last a few hours.
+
+---
+
+## Watching offline
+
+- Go to the **Library** tab. Episodes are grouped by show, in order.
+- Tap an episode to play it. It remembers where you stopped, and the next episode starts automatically when one finishes (5-second countdown, with Cancel).
+- Long-press an **episode** to rename it, mark it watched, or delete it.
+- Long-press a **show name** to mark the whole show watched or delete it.
+- Your videos also appear in the **Files** app under *On My iPhone › VidStash*.
+
+---
+
+## Optional: "Send to VidStash" from Safari
+
+This lets you find an episode in normal Safari and send it straight to VidStash.
+
+1. Open the **Shortcuts** app and tap **+**. Name the shortcut **Send to VidStash**.
+2. Tap the **ⓘ** button, turn on **Show in Share Sheet**, and under share types keep only **URLs** and **Text**.
+3. Add the action **URL Encode** (it encodes the Shortcut Input).
+4. Add a **Text** action. Type `vidstash://open?url=` and then insert the **URL Encoded Text** variable right after it (no space).
+5. Add **Open URLs**.
+
+Now in Safari tap **Share → Send to VidStash**.
+
+---
+
+## Keeping it working
+
+- **Every 7 days** apps installed with a free Apple account expire. To keep VidStash working: connect **LocalDevVPN**, be on **Wi-Fi**, open **SideStore → My Apps** and tap the **days** button next to VidStash (and SideStore). Doing this every few days is easiest.
+- If an app does expire, nothing is lost. Refresh it in SideStore and your downloads are still there.
+- **Updating VidStash:** download the new `VidStash.ipa` from the Releases page and install it the same way (My Apps → +). Your library is kept.
+- Settings → **Clean up leftover files** frees space used by unfinished downloads.
+
+---
+
+## Troubleshooting
+
+| Problem | Try this |
+|---|---|
+| SideStore says it can't connect | Open LocalDevVPN and tap Connect. Make sure you're on Wi-Fi. |
+| VidStash won't open / "no longer available" | It expired: refresh it in SideStore (see *Keeping it working*). |
+| "No video yet" stays grey | Press play in the page and wait for ads to finish. Then try another server from the same button. |
+| Found a video but it's 30 seconds long | That's an ad. Pick the longer one, or wait: the real episode usually shows up after the ad. |
+| Download error mentions 403 / expired | Tap **Find again** on the download. |
+| "Not enough free space" | Delete watched episodes (long-press a show in Library) or pick a lower quality. |
+| Stream download stopped when I left the app | Normal for streams. Open VidStash again and it continues. |
+
+---
+
+## Please tell me (for the next round of fixes)
+
+After you've tried it, tell me:
+
+1. Did SideStore and VidStash install OK?
+2. On an AnimeXin episode: **which servers showed "video found"**, and which didn't?
+3. Did the downloads **play** in the Library (with sound in sync)?
+4. Anything confusing, slow or broken.
