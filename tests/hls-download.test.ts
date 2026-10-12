@@ -45,6 +45,12 @@ function probe(file: string) {
   return JSON.parse(r.stdout.toString()).streams as { codec_type: string; codec_name: string; start_time: string; duration: string }[];
 }
 
+/** Frames a player actually shows (edit lists applied), counted by decoding. */
+function shownFrames(file: string) {
+  const r = spawnSync('ffprobe', ['-v', 'error', '-count_frames', '-select_streams', 'v', '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', file]);
+  return Number(r.stdout.toString().trim());
+}
+
 function decodesCleanly(file: string) {
   const r = spawnSync('ffmpeg', ['-v', 'error', '-i', file, '-f', 'null', '-']);
   return r.status === 0 && r.stderr.toString().trim() === '';
@@ -71,6 +77,7 @@ test('encrypted MPEG-TS stream becomes a playable MP4', { skip: !hasFfmpeg && 'f
   assert.deepEqual(streams.map((s) => s.codec_type).sort(), ['audio', 'video']);
   for (const s of streams) assert.ok(Math.abs(Number(s.duration) - 6) < 0.2, `${s.codec_type} duration ${s.duration}`);
   assert.ok(decodesCleanly(out));
+  assert.equal(shownFrames(out), 150); // 6 s at 25 fps: none cut off by the edit list
 });
 
 test('fMP4 stream with separate audio is combined in sync', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
@@ -83,6 +90,7 @@ test('fMP4 stream with separate audio is combined in sync', { skip: !hasFfmpeg &
   // ffmpeg wrote both renditions starting at 0; the output must keep them aligned.
   for (const s of streams) assert.ok(Math.abs(Number(s.start_time)) < 0.03, `${s.codec_type} starts at ${s.start_time}`);
   assert.ok(decodesCleanly(out));
+  assert.equal(shownFrames(out), 150);
 });
 
 test('byte-range streams (one file, pieces as ranges) work', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {

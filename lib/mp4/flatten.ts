@@ -45,6 +45,8 @@ type Track = {
   duration: number;
   firstDts: number | null;
   minCts: number;
+  /** End of the last frame on the composition timeline (relative to the first decode time). */
+  maxCtsEnd: number;
   /** From the source's edit list: where presentation starts (media time) and any initial delay (seconds). */
   srcMediaTime: number | null;
   srcDelaySec: number;
@@ -127,6 +129,7 @@ export class FlatMp4Writer {
         duration: 0,
         firstDts: null,
         minCts: Infinity,
+        maxCtsEnd: 0,
         srcMediaTime,
         srcDelaySec,
       };
@@ -209,6 +212,7 @@ export class FlatMp4Writer {
           if (cto !== 0) track.hasCtts = true;
           if (cto < 0) track.negativeCtts = true;
           if (relDts + cto < track.minCts) track.minCts = relDts + cto;
+          if (relDts + cto + duration > track.maxCtsEnd) track.maxCtsEnd = relDts + cto + duration;
           if (sampleFlags & NON_SYNC) track.allSync = false;
           else track.sync.push(track.sizes.length);
           track.duration += duration;
@@ -246,7 +250,8 @@ export class FlatMp4Writer {
     let movieDuration = 0;
     const traks = tracks.map((t, i) => {
       const delay = Math.round((startSec(t) - earliest) * movieTimescale);
-      const presented = Math.round(((t.duration - mediaStart(t)) / t.timescale) * movieTimescale);
+      // Shown from the edit's start to the end of the last frame (which, with B-frames, is after the last decode).
+      const presented = Math.round(((Math.max(t.maxCtsEnd, t.duration) - mediaStart(t)) / t.timescale) * movieTimescale);
       movieDuration = Math.max(movieDuration, delay + presented);
       return this.trak(t, i + 1, delay, presented);
     });
