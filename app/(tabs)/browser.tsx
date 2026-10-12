@@ -10,7 +10,7 @@ import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import { addressToUrl, sameSite, shouldBlockNavigation } from '@/lib/browser';
 import { DETECTOR_JS, switchServerJs } from '@/lib/detector';
-import type { Candidate } from '@/lib/probe';
+import { candidateKey, type Candidate } from '@/lib/probe';
 import { onOpenInBrowser } from '@/lib/open-in-browser';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
 import { loadRecent, rememberVisit, type RecentSite } from '@/lib/recent';
@@ -80,7 +80,16 @@ export default function BrowserScreen() {
     if (msg.type === 'media') {
       const candidate = { url: msg.url, kind: msg.kind, frame: msg.frame, via: msg.via };
       startProbe(candidate);
-      setCandidates((list) => (list.some((c) => c.url === msg.url) ? list : [...list, candidate]));
+      // Same stream with a fresh token replaces the old entry rather than adding another.
+      const key = candidateKey(msg.url);
+      setCandidates((list) => {
+        const i = list.findIndex((c) => candidateKey(c.url) === key);
+        if (i < 0) return [...list, candidate];
+        if (list[i].url === msg.url) return list;
+        const next = [...list];
+        next[i] = candidate;
+        return next;
+      });
     } else if (msg.type === 'servers') {
       setServers(msg.servers);
     } else if (msg.type === 'page') {

@@ -15,6 +15,7 @@ import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir } from './fs-i
 import { formatBytes } from './format';
 import { assemble, downloadParts, partsSize, planFingerprint, planStream } from './hls-download';
 import { getStreamQuality } from './settings';
+import { deleteThumbnail, ensureThumbnail, thumbsDir } from './thumbs';
 import { sniffVideo, type SniffResult } from './sniff';
 import { USER_AGENT } from './ua';
 
@@ -141,6 +142,7 @@ function startFile(episode: Episode): Job {
           totalBytes: size,
           resumeJson: null,
         });
+        makeThumbnail(episode.id);
       } else {
         // Paused: keep what native code needs to pick the transfer back up.
         let resumeJson: string | null = null;
@@ -221,6 +223,7 @@ function startStream(episode: Episode): Job {
     const size = videoFile(episode).size ?? 0;
     updateEpisode(episode.id, { status: 'done', bytesWritten: size, totalBytes: size, durationSec: duration });
     deleteParts(episode.id);
+    makeThumbnail(episode.id);
   })()
     .catch((err: unknown) => {
       if (pausing) updateEpisode(episode.id, { status: 'paused' });
@@ -235,6 +238,12 @@ function startStream(episode: Episode): Job {
     },
     cancel: () => controller.abort(),
   };
+}
+
+function makeThumbnail(id: number) {
+  const e = getEpisode(id);
+  if (!e) return;
+  ensureThumbnail(e, videoFile(e).uri).then((made) => made && notify());
 }
 
 function freeSpace(): number | null {
@@ -341,6 +350,7 @@ export function remove(id: number) {
     }
   }
   deleteParts(id);
+  deleteThumbnail(id);
   progress.delete(id);
   deleteEpisodeRow(id);
   setTimeout(() => removing.delete(id), 5000);
@@ -371,6 +381,15 @@ export function cleanUpFiles(): number {
       for (const entry of videosDir.list()) {
         // Only files the app named itself ("<id>.mp4"): the folder is visible in the Files app.
         if (/^\d+\.mp4$/.test(entry.name) && !known.has(entry.name)) {
+          freed += entry.size ?? 0;
+          entry.delete();
+        }
+      }
+    }
+    if (thumbsDir.exists) {
+      for (const entry of thumbsDir.list()) {
+        const m = entry.name.match(/^(\d+)\.jpg$/);
+        if (m && !episodes.has(Number(m[1]))) {
           freed += entry.size ?? 0;
           entry.delete();
         }

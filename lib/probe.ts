@@ -69,3 +69,19 @@ export async function probe(c: Candidate, userAgent: string): Promise<ProbeResul
     return { status: 'invalid', reason: message.includes('abort') ? 'Timed out' : message };
   }
 }
+
+/**
+ * Identity of a detected link for de-duplication. Players often request the
+ * same stream twice with fresh tokens in the query string; those count as one.
+ * Short generic paths ("/video.m3u8") keep their query, which is what tells
+ * videos apart there.
+ */
+export function candidateKey(url: string): string {
+  try {
+    const u = new URL(url);
+    const segments = u.pathname.split('/').filter(Boolean);
+    return u.host + u.pathname + (segments.length < 2 ? u.search : '');
+  } catch {
+    return url;
+  }
+}

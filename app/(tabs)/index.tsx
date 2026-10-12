@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { Alert, Pressable, SectionList, StyleSheet } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
+import { Thumbnail } from '@/components/Thumbnail';
 import { useColors } from '@/components/useColors';
 import { updateEpisode, type Episode } from '@/lib/db';
 import { remove } from '@/lib/downloads';
@@ -64,15 +65,18 @@ export default function LibraryScreen() {
             onPress={() => router.push({ pathname: '/player/[id]', params: { id: item.id } })}
             onLongPress={() => showActions(item)}
             style={({ pressed }) => [styles.row, { backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
-            <View style={styles.rowText} lightColor="transparent" darkColor="transparent">
-              <Text style={styles.rowTitle} numberOfLines={1}>
-                {item.watched ? '✓ ' : ''}
-                {item.title}
-              </Text>
-              <Text style={[styles.rowMeta, { color: colors.muted }]}>
-                {item.durationSec > 0 ? formatDuration(item.durationSec) : 'Not played yet'}
-                {item.positionSec > 0 && !item.watched ? ` · ${formatDuration(item.positionSec)} watched` : ''}
-              </Text>
+            <View style={styles.rowInner} lightColor="transparent" darkColor="transparent">
+              <Thumbnail episode={item} />
+              <View style={styles.rowText} lightColor="transparent" darkColor="transparent">
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {item.watched ? '✓ ' : ''}
+                  {item.title}
+                </Text>
+                <Text style={[styles.rowMeta, { color: colors.muted }]}>
+                  {item.durationSec > 0 ? formatDuration(item.durationSec) : 'Not played yet'}
+                  {item.positionSec > 0 && !item.watched ? ` · ${formatDuration(item.positionSec)} watched` : ''}
+                </Text>
+              </View>
             </View>
             {fraction > 0 && !item.watched ? (
               <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
@@ -93,7 +97,8 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
   sectionTitle: { fontSize: 18, fontWeight: '700' },
   row: { marginHorizontal: 16, marginBottom: 8, borderRadius: 10, overflow: 'hidden' },
-  rowText: { padding: 14 },
+  rowInner: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 12 },
+  rowText: { flex: 1 },
   rowTitle: { fontSize: 16, fontWeight: '500' },
   rowMeta: { fontSize: 13, marginTop: 4 },
   progressTrack: { height: 3 },
