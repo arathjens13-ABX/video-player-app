@@ -9,8 +9,8 @@
  *    paused or interrupted download picks up where it stopped.
  * 2. assemble: parts are read back in order and written into a single MP4.
  */
-import { cbc } from '@noble/ciphers/aes.js';
 
+import { decryptAes128Cbc } from './aes';
 import { audioFor, parsePlaylist, pickVariant, type Segment } from './hls';
 import { readBoxes } from './mp4/boxes';
 import { FlatMp4Writer, type OutputSink } from './mp4/flatten';
@@ -191,7 +191,7 @@ export async function downloadParts(
       const key = await getKey(part.key.url);
       if (key.length !== 16) throw new Error('The stream’s decryption key is invalid');
       try {
-        data = cbc(key, ivFor(part)).decrypt(data);
+        data = await decryptAes128Cbc(key, ivFor(part), data);
       } catch {
         throw new Error('A piece of the stream couldn’t be decrypted');
       }

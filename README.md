@@ -90,5 +90,6 @@ Layout:
 - `lib/detector.ts`: the script injected into web pages to find videos and mirror servers.
 - `lib/probe.ts`, `lib/hls.ts`: checking found links; HLS playlist parsing.
 - `lib/hls-download.ts`: stream downloads (plan → download pieces → assemble). `lib/mp4/`: MP4 box tools and the fragmented-to-regular MP4 writer. `lib/fs-io.ts`: the app's storage for both.
-- `tests/`: `npm test` runs unit tests plus detector tests in headless Chromium against offline fixture pages.
+- `tests/`: `npm test` runs unit tests, detector tests in headless Chromium against offline fixture pages, and end-to-end stream downloads of ffmpeg-made fixtures checked with ffprobe.
+- `scripts/hermes/check.sh`: runs the stream pipeline in the Hermes VM (the phone's JavaScript engine) and checks the output is byte-identical to Node's. Needs a Hermes build; see the script header.
 - `.github/workflows/build.yml`: CI that builds the APK and IPA and publishes the release.
