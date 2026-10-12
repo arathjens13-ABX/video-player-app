@@ -1,5 +1,4 @@
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput } from 'react-native';
 
@@ -9,9 +8,8 @@ import type { Episode } from '@/lib/db';
 import { pause, remove, resume, retry } from '@/lib/downloads';
 import { formatBytes } from '@/lib/format';
 import { useEpisodes, useProgress } from '@/lib/hooks';
-import { classifyLink, normalizeUrl } from '@/lib/links';
-import { requestOpenInBrowser } from '@/lib/open-in-browser';
-import { USER_AGENT } from '@/lib/ua';
+import { extractUrl } from '@/lib/links';
+import { routeLink } from '@/lib/route-link';
 
 export default function DownloadsScreen() {
   const colors = useColors();
@@ -20,23 +18,18 @@ export default function DownloadsScreen() {
   const [checking, setChecking] = useState(false);
 
   async function addLink(raw: string) {
-    const url = normalizeUrl(raw);
+    const url = extractUrl(raw);
     if (!url) {
       Alert.alert('That doesn’t look like a link', 'Paste a full web address, like https://example.com/video.mp4');
       return;
     }
     setChecking(true);
-    const kind = await classifyLink(url, { 'User-Agent': USER_AGENT });
-    setChecking(false);
-    if (kind === 'page') {
-      // A web page: open it in the browser so the video inside can be found.
+    try {
+      await routeLink(url);
       setInput('');
-      requestOpenInBrowser(url);
-      router.navigate('/browser');
-      return;
+    } finally {
+      setChecking(false);
     }
-    setInput('');
-    router.push({ pathname: '/episode-form', params: { url, kind } });
   }
 
   async function pasteAndAdd() {

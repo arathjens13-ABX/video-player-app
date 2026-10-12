@@ -7,22 +7,14 @@ import { useColors } from '@/components/useColors';
 import { updateEpisode, type Episode } from '@/lib/db';
 import { remove } from '@/lib/downloads';
 import { formatDuration } from '@/lib/format';
+import { groupByShow } from '@/lib/library';
 import { useEpisodes } from '@/lib/hooks';
 
 export default function LibraryScreen() {
   const episodes = useEpisodes();
   const colors = useColors();
 
-  const sections = useMemo(() => {
-    const byShow = new Map<string, Episode[]>();
-    for (const e of episodes) {
-      if (e.status !== 'done') continue;
-      const list = byShow.get(e.show) ?? [];
-      list.push(e);
-      byShow.set(e.show, list);
-    }
-    return [...byShow.entries()].map(([title, data]) => ({ title, data }));
-  }, [episodes]);
+  const sections = useMemo(() => groupByShow(episodes), [episodes]);
 
   function showActions(e: Episode) {
     Alert.alert(e.title, e.show, [

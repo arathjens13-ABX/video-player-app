@@ -2,18 +2,29 @@ import { useEventListener } from 'expo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getEpisode, notify, updateEpisode } from '@/lib/db';
+import { getEpisode, listEpisodes, notify, updateEpisode, type Episode } from '@/lib/db';
 import { videoFile } from '@/lib/downloads';
+import { nextEpisode } from '@/lib/library';
+
+function playEpisode(id: number) {
+  router.replace({ pathname: '/player/[id]', params: { id } });
+}
 
 const WATCHED_FRACTION = 0.9;
 
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const episodeId = Number(id);
+  // Keyed by id so moving to the next episode starts a fresh player.
+  return <Player key={id} episodeId={Number(id)} />;
+}
+
+const UP_NEXT_SECONDS = 5;
+
+function Player({ episodeId }: { episodeId: number }) {
   // Read once: re-rendering on every position save would reset the player.
   const episode = useRef(getEpisode(episodeId)).current;
   const uri = episode ? videoFile(episode).uri : null;
@@ -40,9 +51,22 @@ export default function PlayerScreen() {
     savePosition(currentTime);
   });
 
+  const [upNext, setUpNext] = useState<{ episode: Episode; seconds: number } | null>(null);
   useEventListener(player, 'playToEnd', () => {
-    if (episode) updateEpisode(episode.id, { positionSec: 0, watched: 1 });
+    if (!episode) return;
+    updateEpisode(episode.id, { positionSec: 0, watched: 1 });
+    const next = nextEpisode(listEpisodes(), episode);
+    if (next) setUpNext({ episode: next, seconds: UP_NEXT_SECONDS });
   });
+
+  useEffect(() => {
+    if (!upNext) return;
+    const timer = setTimeout(() => {
+      if (upNext.seconds <= 1) playEpisode(upNext.episode.id);
+      else setUpNext({ ...upNext, seconds: upNext.seconds - 1 });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [upNext]);
 
   function savePosition(currentTime: number) {
     if (!episode || !resumed.current) return;
@@ -79,6 +103,25 @@ export default function PlayerScreen() {
       ) : (
         <Text style={styles.missing}>This video couldn’t be found.</Text>
       )}
+      {upNext ? (
+        <View style={styles.upNext}>
+          <Text style={styles.upNextLabel}>Up next in {upNext.seconds}…</Text>
+          <Text style={styles.upNextTitle} numberOfLines={1}>
+            {upNext.episode.title}
+          </Text>
+          <View style={styles.upNextButtons}>
+            <Pressable onPress={() => setUpNext(null)} hitSlop={8} style={styles.upNextButton}>
+              <Text style={styles.upNextButtonText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => playEpisode(upNext.episode.id)}
+              hitSlop={8}
+              style={[styles.upNextButton, styles.upNextPrimary]}>
+              <Text style={styles.upNextButtonText}>Play now</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       <SafeAreaView style={styles.closeWrap} edges={['top', 'left']} pointerEvents="box-none">
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.close}>
           <Text style={styles.closeText}>✕</Text>
@@ -102,4 +145,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   closeText: { color: '#fff', fontSize: 18 },
+  upNext: {
+    position: 'absolute',
+    right: 24,
+    bottom: 80,
+    width: 260,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(20,20,24,0.92)',
+  },
+  upNextLabel: { color: '#bbb', fontSize: 13 },
+  upNextTitle: { color: '#fff', fontSize: 17, fontWeight: '600', marginTop: 2 },
+  upNextButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 12 },
+  upNextButton: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
+  upNextPrimary: { backgroundColor: '#4f7cff' },
+  upNextButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

@@ -86,3 +86,10 @@ export function guessNames(source: string): { show: string; title: string } {
   }
   return { show: 'Unsorted', title: titleCase(text) || 'Untitled' };
 }
+
+/** Finds the link in pasted or shared text ("Watch this: https://…"), or treats the text itself as an address. */
+export function extractUrl(text: string): string | null {
+  const found = text.match(/https?:\/\/[^\s<>"']+/i);
+  if (found) return normalizeUrl(found[0].replace(/[).,!?]+$/, ''));
+  return normalizeUrl(text);
+}

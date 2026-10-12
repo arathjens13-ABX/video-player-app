@@ -26,6 +26,7 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="episode-form" options={{ presentation: 'modal', title: 'Episode' }} />
+        <Stack.Screen name="open" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen
           name="player/[id]"
           options={{ presentation: 'fullScreenModal', headerShown: false }}

@@ -7,10 +7,11 @@ Download videos to your phone and watch them offline. It runs on iPhone and Andr
 - **Browser tab:** browse to an episode and press play. The app watches what the page's player loads (inside embedded players too, on iPhone) and lights up a **"⬇ N videos found"** button. Each find is checked first (length, quality, size), so ads and dead links are hidden.
 - **Servers:** on sites with a mirror picker (like animexin), the same button lists every server. Tapping one switches the page's player to it.
 - **Blocks ad redirects and pop-ups**, with an "Open anyway" button.
-- **Downloads tab:** paste a direct video link (`.mp4`, `.m4v`, `.mov`, `.webm`) to download it, or paste an episode page link to open it in the browser.
+- **Downloads tab:** paste a link, or text containing one. Video files and streams go to the download form; episode pages open in the browser.
+- **Share sheet:** send links from Safari or other apps (see *Send links from anywhere* below).
 - Download queue: two at a time, progress, pause/resume, retry, remove. On iPhone, downloads keep going when you leave the app. Finished files are checked, so an error page saved as `.mp4` shows up as a failed download.
-- Library grouped by show. Tap to play; long-press to rename, mark as watched, or delete.
-- Player: resumes where you left off, Picture-in-Picture, background audio, AirPlay. Episodes count as watched at 90%.
+- Library grouped by show, episodes in number order. Tap to play; long-press to rename, mark as watched, or delete.
+- Player: resumes where you left off, Picture-in-Picture, background audio, AirPlay. Episodes count as watched at 90%. When one ends, the next downloaded episode starts after a 5-second countdown.
 - On iPhone, downloaded files also appear in the Files app (On My iPhone › VidStash).
 
 - **Streams (`.m3u8`)** download too: up to 1080p, AES-128 encrypted streams included, plus streams whose audio is separate (Dailymotion). Pieces download four at a time and are put together into a normal MP4 that plays and seeks offline. Keep the app open while a stream downloads (the screen stays on). If you leave or it gets closed, it picks up from the last finished piece.
@@ -49,6 +50,20 @@ One-time setup needs your Windows PC:
 A free Apple ID signs apps for 7 days. SideStore refreshes them from the phone, so open SideStore every few days (or let its background refresh run). Free accounts can have up to 3 sideloaded apps active at once, and SideStore counts as one.
 
 To update: download the new `.ipa` and install it the same way. Your library and downloads are kept.
+
+## Send links from anywhere (Share → VidStash)
+
+Set up a one-time Shortcut so VidStash shows up in the iPhone share sheet:
+
+1. Open the **Shortcuts** app → **+** → name it **Send to VidStash**.
+2. Tap the **ⓘ** (details) button → turn on **Show in Share Sheet** → under *Share Sheet types*, keep only **URLs** and **Text**.
+3. Add the action **URL Encode** (it encodes the *Shortcut Input*).
+4. Add **Text** and type `vidstash://open?url=`, then insert the *URL Encoded Text* variable right after it.
+5. Add **Open URLs** (it opens the Text).
+
+Now in Safari, or any app that shares a link: **Share → Send to VidStash**. Episode pages open in VidStash's browser; direct video links go straight to the download form.
+
+Any app or tool can do the same with a `vidstash://open?url=<encoded link>` link.
 
 ## Development
 

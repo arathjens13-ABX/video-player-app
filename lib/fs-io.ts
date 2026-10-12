@@ -39,6 +39,18 @@ export class FilePartStore implements PartStore {
   size(name: string) {
     return new File(this.dir, name).size ?? 0;
   }
+
+  /**
+   * Makes sure the parts here belong to the plan with this fingerprint: keeps
+   * them if they do, otherwise empties the folder. Then records the fingerprint.
+   */
+  prepare(fingerprint: string) {
+    const marker = new File(this.dir, 'plan.txt');
+    if (marker.exists && marker.textSync() === fingerprint) return;
+    for (const entry of this.dir.list()) entry.delete();
+    marker.create();
+    marker.write(fingerprint);
+  }
 }
 
 export class FileSink implements OutputSink {

@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { allParts, assemble, downloadParts, partsSize, planStream, type FetchBytes } from '../lib/hls-download';
+import { allParts, assemble, downloadParts, partsSize, planFingerprint, planStream, type FetchBytes } from '../lib/hls-download';
 import { DirStore, FileSink } from './support/node-io';
 
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -192,4 +192,15 @@ test('assembly can consume parts as it goes, and stops when cancelled', { skip: 
   sink2.close();
   assert.equal(allParts(plan).filter((p) => store.has(p.name)).length, 0);
   assert.ok(decodesCleanly(out));
+});
+
+test('plan fingerprints ignore signed query strings but not quality or layout', async () => {
+  const io = fixtureFetch();
+  const a = await planStream(BASE + 'fmp4-split/master.m3u8', io.fetchText);
+  const signed = await planStream(BASE + 'fmp4-split/master.m3u8', async (u) =>
+    (await io.fetchText(u)).replace(/^(?!#)(\S+)$/gm, '$1?token=xyz')
+  );
+  assert.equal(planFingerprint(a), planFingerprint(signed));
+  const ts = await planStream(BASE + 'ts-aes/index.m3u8', io.fetchText);
+  assert.notEqual(planFingerprint(a), planFingerprint(ts));
 });

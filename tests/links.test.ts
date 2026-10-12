@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { guessNames, normalizeUrl } from '../lib/links';
+import { extractUrl, guessNames, normalizeUrl } from '../lib/links';
 
 test('guessNames reads show and episode from animexin-style URLs', () => {
   assert.deepEqual(
@@ -44,4 +44,11 @@ test('normalizeUrl adds a scheme and rejects junk', () => {
 test('guessNames handles S/E style and ignores stray E-numbers', () => {
   assert.deepEqual(guessNames('Stellar Transformation S5 E12'), { show: 'Stellar Transformation S5', title: 'Episode 12' });
   assert.deepEqual(guessNames('https://x.com/Soul Land E02 Episode 7.mp4'), { show: 'Soul Land E02', title: 'Episode 7' });
+});
+
+test('extractUrl pulls the link out of shared text', () => {
+  assert.equal(extractUrl('Watch this: https://animexin.dev/soul-land-episode-1/ so good!'), 'https://animexin.dev/soul-land-episode-1/');
+  assert.equal(extractUrl('(https://a.b/c.mp4).'), 'https://a.b/c.mp4');
+  assert.equal(extractUrl('animexin.dev'), 'https://animexin.dev/');
+  assert.equal(extractUrl('no link here'), null);
 });

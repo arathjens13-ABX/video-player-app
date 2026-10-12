@@ -229,6 +229,25 @@ export async function downloadParts(
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+/**
+ * Identifies a plan's pieces, so a resumed download can tell whether the parts
+ * on disk came from the same stream (same quality, same segment layout).
+ * Query strings are ignored: signed URLs change on every visit.
+ */
+export function planFingerprint(plan: StreamPlan): string {
+  const paths = allParts(plan).map((p) => {
+    try {
+      return new URL(p.url).pathname + (p.range ? `@${p.range.offset}+${p.range.length}` : '');
+    } catch {
+      return p.url;
+    }
+  });
+  // A short hash keeps the marker file small.
+  let h = 0x811c9dc5;
+  for (const ch of paths.join('|')) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  return `${plan.format}:${plan.height ?? 0}:${paths.length}:${h.toString(16)}`;
+}
+
 /** Bytes the downloaded parts take up: roughly the size the finished MP4 will be. */
 export function partsSize(plan: StreamPlan, store: PartStore) {
   return allParts(plan).reduce((n, p) => n + (store.has(p.name) ? store.size(p.name) : 0), 0);

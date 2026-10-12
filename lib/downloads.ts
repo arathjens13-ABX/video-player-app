@@ -13,7 +13,8 @@ import {
 } from './db';
 import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir } from './fs-io';
 import { formatBytes } from './format';
-import { assemble, downloadParts, partsSize, planStream } from './hls-download';
+import { assemble, downloadParts, partsSize, planFingerprint, planStream } from './hls-download';
+import { getStreamQuality } from './settings';
 import { sniffVideo, type SniffResult } from './sniff';
 import { USER_AGENT } from './ua';
 
@@ -60,6 +61,7 @@ export function enqueue(d: NewDownload) {
     pageUrl: d.pageUrl ?? null,
     headersJson: JSON.stringify(headers),
     kind: d.kind,
+    maxHeight: d.kind === 'hls' ? getStreamQuality() : null,
   });
   pump();
   return id;
@@ -172,7 +174,9 @@ function startStream(episode: Episode): Job {
   const store = new FilePartStore(partsDir(episode.id));
 
   (async () => {
-    const plan = await planStream(episode.sourceUrl, fetchText(headers, controller.signal), MAX_STREAM_HEIGHT);
+    const plan = await planStream(episode.sourceUrl, fetchText(headers, controller.signal), episode.maxHeight ?? MAX_STREAM_HEIGHT);
+    // Pieces saved earlier must belong to this exact stream; if the site now serves something else, start over.
+    store.prepare(planFingerprint(plan));
     const free = freeSpace();
     const remaining = (plan.estimatedBytes ?? 0) - partsSize(plan, store);
     if (free !== null && remaining > 0 && free < remaining + 100e6) {
@@ -342,15 +346,73 @@ export function remove(id: number) {
   setTimeout(() => removing.delete(id), 5000);
 }
 
+/**
+ * Deletes files nothing refers to: stream pieces of finished or removed
+ * downloads, and videos whose episode is gone. Returns the bytes freed.
+ */
+export function cleanUpFiles(): number {
+  const episodes = new Map(listEpisodes().map((e) => [e.id, e]));
+  let freed = 0;
+  const partsRoot = new Directory(Paths.document, 'parts');
+  try {
+    if (partsRoot.exists) {
+      for (const entry of partsRoot.list()) {
+        if (!/^\d+$/.test(entry.name)) continue;
+        const e = episodes.get(Number(entry.name));
+        const inUse = e && e.status !== 'done' && !removing.has(e.id);
+        if (!inUse) {
+          freed += entry.size ?? 0;
+          entry.delete();
+        }
+      }
+    }
+    if (videosDir.exists) {
+      const known = new Set([...episodes.values()].map((e) => e.fileName));
+      for (const entry of videosDir.list()) {
+        // Only files the app named itself ("<id>.mp4"): the folder is visible in the Files app.
+        if (/^\d+\.mp4$/.test(entry.name) && !known.has(entry.name)) {
+          freed += entry.size ?? 0;
+          entry.delete();
+        }
+      }
+    }
+  } catch {
+    // Best effort; anything left is tried again next time.
+  }
+  return freed;
+}
+
+/** Space taken by pieces of unfinished stream downloads. */
+export function temporaryFilesSize(): number {
+  try {
+    const partsRoot = new Directory(Paths.document, 'parts');
+    return partsRoot.exists ? (partsRoot.size ?? 0) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 let initialized = false;
 
-/** Call once at startup: downloads cut off by the app closing go back in the queue. */
+/**
+ * Call once at startup: downloads cut off by the app closing go back in the
+ * queue, videos deleted outside the app (e.g. in the Files app) are flagged so
+ * they can be downloaded again, and leftover files are cleaned up.
+ */
 export function initDownloads() {
   if (initialized) return;
   initialized = true;
   for (const e of listEpisodes()) {
     if (e.status === 'downloading') updateEpisode(e.id, { status: 'queued' }, { silent: true });
+    else if (e.status === 'done' && !videoFile(e).exists) {
+      updateEpisode(
+        e.id,
+        { status: 'error', error: 'The video file was deleted outside the app. Retry to download it again.', bytesWritten: 0, resumeJson: null },
+        { silent: true }
+      );
+    }
   }
+  cleanUpFiles();
   notify();
   pump();
 }

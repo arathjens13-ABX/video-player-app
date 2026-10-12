@@ -23,6 +23,8 @@ export type Episode = {
   durationSec: number;
   watched: number;
   createdAt: number;
+  /** Highest stream quality (video height) chosen when the download was added. */
+  maxHeight: number | null;
 };
 
 const MIGRATIONS: string[] = [
@@ -45,6 +47,7 @@ const MIGRATIONS: string[] = [
     watched INTEGER NOT NULL DEFAULT 0,
     createdAt INTEGER NOT NULL
   );`,
+  `ALTER TABLE episodes ADD COLUMN maxHeight INTEGER;`,
 ];
 
 export const db = SQLite.openDatabaseSync('vidstash.db');
@@ -88,18 +91,19 @@ export function getEpisode(id: number): Episode | null {
 }
 
 export function insertEpisode(
-  e: Pick<Episode, 'show' | 'title' | 'sourceUrl' | 'pageUrl' | 'headersJson' | 'kind'>
+  e: Pick<Episode, 'show' | 'title' | 'sourceUrl' | 'pageUrl' | 'headersJson' | 'kind' | 'maxHeight'>
 ): number {
   const result = db.runSync(
-    `INSERT INTO episodes (show, title, fileName, sourceUrl, pageUrl, headersJson, kind, status, createdAt)
-     VALUES (?, ?, '', ?, ?, ?, ?, 'queued', ?)`,
+    `INSERT INTO episodes (show, title, fileName, sourceUrl, pageUrl, headersJson, kind, status, createdAt, maxHeight)
+     VALUES (?, ?, '', ?, ?, ?, ?, 'queued', ?, ?)`,
     e.show,
     e.title,
     e.sourceUrl,
     e.pageUrl,
     e.headersJson,
     e.kind,
-    Date.now()
+    Date.now(),
+    e.maxHeight
   );
   const id = result.lastInsertRowId;
   db.runSync('UPDATE episodes SET fileName = ? WHERE id = ?', `${id}.mp4`, id);
