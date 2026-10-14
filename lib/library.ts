@@ -16,18 +16,24 @@ export function compareEpisodes(a: Pick<Episode, 'title' | 'createdAt'>, b: Pick
   return a.createdAt - b.createdAt;
 }
 
-/** Downloaded episodes grouped by show, shows A–Z, episodes in order. */
+/** "Renegade  immortal " and "Renegade Immortal" are the same show. */
+export function showKey(show: string) {
+  return show.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** Downloaded episodes grouped by show (named as first added), shows A–Z, episodes in order. */
 export function groupByShow<T extends Pick<Episode, 'show' | 'title' | 'createdAt' | 'status'>>(episodes: T[]) {
-  const byShow = new Map<string, T[]>();
-  for (const e of episodes) {
+  const byShow = new Map<string, { title: string; data: T[] }>();
+  for (const e of [...episodes].sort((a, b) => a.createdAt - b.createdAt)) {
     if (e.status !== 'done') continue;
-    const list = byShow.get(e.show) ?? [];
-    list.push(e);
-    byShow.set(e.show, list);
+    const key = showKey(e.show);
+    const group = byShow.get(key) ?? { title: e.show.trim(), data: [] };
+    group.data.push(e);
+    byShow.set(key, group);
   }
-  return [...byShow.entries()]
-    .sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-    .map(([title, data]) => ({ title, data: data.sort(compareEpisodes) }));
+  return [...byShow.values()]
+    .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+    .map((g) => ({ title: g.title, data: g.data.sort(compareEpisodes) }));
 }
 
 /** The downloaded episode that comes after `current` in its show, if there is one. */
@@ -35,7 +41,7 @@ export function nextEpisode<T extends Pick<Episode, 'id' | 'show' | 'title' | 'c
   episodes: T[],
   current: T
 ): T | null {
-  const show = groupByShow(episodes).find((g) => g.title === current.show);
+  const show = groupByShow(episodes).find((g) => showKey(g.title) === showKey(current.show));
   if (!show) return null;
   const i = show.data.findIndex((e) => e.id === current.id);
   return i >= 0 && i + 1 < show.data.length ? show.data[i + 1] : null;

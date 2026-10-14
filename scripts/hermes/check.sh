@@ -24,15 +24,16 @@ npx -y esbuild@0.25.10 "$DIR/entry.ts" --bundle --format=iife --target=es2020 --
   --main-fields=main,module --outfile="$OUT/bundle.js" --log-level=warning
 rm -f "$DIR/fixtures.gen.js"
 
-node "$OUT/bundle.js" > "$OUT/node.out"
+node "$OUT/bundle.js" > "$OUT/node.out" || true
 # React Native's Babel preset always transforms block scoping; -Xes6-block-scoping gives Hermes the same semantics.
-"$HERMES" -O -Xes6-block-scoping -w "$OUT/bundle.js" > "$OUT/hermes.out"
+"$HERMES" -O -Xes6-block-scoping -w "$OUT/bundle.js" > "$OUT/hermes.out" || true
 
 status=0
+if ! grep -q '^DONE' "$OUT/node.out"; then echo "✗ Node run did not finish:"; grep -A5 FAILED "$OUT/node.out" || true; exit 1; fi
+if ! grep -q '^DONE' "$OUT/hermes.out"; then echo "✗ Hermes run did not finish:"; grep -A5 FAILED "$OUT/hermes.out" || true; exit 1; fi
 for name in $(grep '^RESULT' "$OUT/node.out" | awk '{print $2}'); do
-  a=$(grep "^B64 $name " "$OUT/node.out" | md5sum | cut -c1-12)
-  b=$(grep "^B64 $name " "$OUT/hermes.out" | md5sum | cut -c1-12)
+  a=$(grep "^B64 $name " "$OUT/node.out" | md5sum | cut -c1-12 || true)
+  b=$(grep "^B64 $name " "$OUT/hermes.out" | md5sum | cut -c1-12 || true)
   if [ "$a" = "$b" ]; then echo "✓ $name identical in Node and Hermes"; else echo "✗ $name differs"; status=1; fi
 done
-grep -q '^DONE' "$OUT/hermes.out" || { echo "✗ Hermes run did not finish:"; grep FAILED "$OUT/hermes.out"; status=1; }
 exit $status

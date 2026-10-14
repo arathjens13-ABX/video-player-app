@@ -51,5 +51,6 @@ export class FileSink implements OutputSink {
 export const nodeFetchBytes: FetchBytes = async (url, headers, signal) => {
   const res = await fetch(url, { headers, signal });
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  if (headers.Range && res.status !== 206) throw new Error('The server doesn’t support partial downloads');
   return new Uint8Array(await res.arrayBuffer());
 };

@@ -1,3 +1,4 @@
+import { withTimeout } from './http';
 import { URL } from './url';
 
 export type LinkKind = 'mp4' | 'hls' | 'page';
@@ -35,10 +36,7 @@ export async function classifyLink(url: string, headers: Record<string, string>)
   if (HLS_EXT.test(path)) return 'hls';
   if (VIDEO_EXT.test(path)) return 'mp4';
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, { method: 'HEAD', headers, signal: controller.signal });
-    clearTimeout(timer);
+    const res = await withTimeout(8000, (signal) => fetch(url, { method: 'HEAD', headers, signal }));
     return kindFromContentType(res.headers.get('content-type')) ?? 'page';
   } catch {
     return 'page';
@@ -109,12 +107,29 @@ export function hostOf(url: string): string {
 }
 
 /**
- * A link for the log: host and path, with query values dropped ("?token=…&expires=…")
- * so a shared report doesn't hand out working signed links.
+ * Signed-URL tokens in a path: long and either one unbroken run (base64, hex,
+ * JWT, "sec2(…)") or mixed-case with digits. Page slugs ("renegade-immortal-
+ * episode-12") and file names are left alone.
+ */
+function looksLikeToken(seg: string) {
+  if (seg.length <= 24 || /\.(m3u8|mp4|m4s|ts|key)$/i.test(seg)) return false;
+  const unbroken = !/-/.test(seg) && /[A-Za-z]/.test(seg) && /\d/.test(seg);
+  const mixed = /[A-Z]/.test(seg) && /[a-z]/.test(seg) && /\d/.test(seg);
+  return unbroken || mixed;
+}
+
+/**
+ * A link for the log: host and path, with query values and the fragment
+ * dropped, and long token-like path segments shortened, so a shared report
+ * doesn't hand out working signed links.
  */
 export function shortUrl(url: string, max = 120): string {
-  const [base, query] = url.replace(/^https?:\/\//, '').split('?', 2);
+  const [base, query] = url.replace(/^https?:\/\//, '').split('#')[0].split('?', 2);
+  const path = base
+    .split('/')
+    .map((seg, i) => (i > 0 && looksLikeToken(seg) ? `${seg.slice(0, 6)}…` : seg))
+    .join('/');
   const keys = query ? query.split('&').map((kv) => kv.split('=')[0]).filter(Boolean) : [];
-  const out = keys.length ? `${base}?${keys.map((k) => `${k}=…`).join('&')}` : base;
+  const out = keys.length ? `${path}?${keys.map((k) => `${k}=…`).join('&')}` : path;
   return out.length > max ? out.slice(0, max) + '…' : out;
 }

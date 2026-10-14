@@ -13,6 +13,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { allParts, assemble, downloadParts, partsSize, planFingerprint, planStream, type FetchBytes } from '../lib/hls-download';
+import { readBoxes } from '../lib/mp4/boxes';
 import { DirStore, FileSink } from './support/node-io';
 
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -246,4 +247,49 @@ test('a piece that keeps failing stops the whole download cleanly', async () => 
     retries.filter((r) => r.startsWith('video-1#')),
     ['video-1#1', 'video-1#2', 'video-1#3'] // 4 attempts = 3 retries, no "retry" after the last one
   );
+});
+
+test('a TS stream that switches resolution midway is refused, not saved corrupt', async () => {
+  const io = fixtureFetch();
+  const plan = await planStream(BASE + 'ts-switch/index.m3u8', io.fetchText);
+  const store = new DirStore(tempDir());
+  await downloadParts(plan, store, io.fetchBytes, {});
+  const sink = new FileSink(path.join(tempDir(), 'out.mp4'));
+  await assert.rejects(assemble(plan, store, sink), /changes format/);
+  sink.close();
+});
+
+test('TS pieces disguised as images (fake PNG header) are unwrapped', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new Array(120).fill(0x47 ^ 0xff)]);
+  const io = fixtureFetch({
+    transform: (u, b) => (u.endsWith('.ts') ? new Uint8Array([...png, ...b]) : b),
+  });
+  const { out } = await download(BASE + 'ts-ranges/index.m3u8', io);
+  assert.ok(decodesCleanly(out));
+  assert.equal(shownFrames(out), 150);
+});
+
+test('a gap between fragments is followed, keeping tracks on the source timeline', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  // Shift the audio's last fragment 0.5 s later, as a stream with a small gap would be.
+  const shift = (u: string, b: Uint8Array) => {
+    if (!u.endsWith('audio/seg3.m4s')) return b;
+    const copy = b.slice();
+    const moof = readBoxes(copy).find((x) => x.type === 'moof')!;
+    const tfdt = readBoxes(copy, readBoxes(copy, moof.dataStart, moof.end).find((x) => x.type === 'traf')!.dataStart, moof.end).find(
+      (x) => x.type === 'tfdt'
+    )!;
+    const v1 = copy[tfdt.dataStart] === 1;
+    const o = tfdt.dataStart + (v1 ? 8 : 4); // low 32 bits
+    const value = ((copy[o] << 24) | (copy[o + 1] << 16) | (copy[o + 2] << 8) | copy[o + 3]) >>> 0;
+    const next = value + 24000; // 0.5 s at 48 kHz
+    copy[o] = next >>> 24;
+    copy[o + 1] = (next >>> 16) & 255;
+    copy[o + 2] = (next >>> 8) & 255;
+    copy[o + 3] = next & 255;
+    return copy;
+  };
+  const { out } = await download(BASE + 'fmp4-split/master.m3u8', fixtureFetch({ transform: shift }));
+  const audio = probe(out).find((s) => s.codec_type === 'audio')!;
+  assert.ok(Math.abs(Number(audio.duration) - 6.52) < 0.05, `audio duration ${audio.duration}`);
+  assert.ok(decodesCleanly(out));
 });

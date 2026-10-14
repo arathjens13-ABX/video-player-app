@@ -69,3 +69,15 @@ test('shortUrl drops query values so reports never contain working tokens', () =
   assert.ok(!shortUrl('https://x.y/v.m3u8?token=abc123').includes('abc123'));
   assert.equal(shortUrl('https://a.b/' + 'x'.repeat(200), 20).length, 21);
 });
+
+test('shortUrl hides tokens carried in the path or fragment', () => {
+  const out = shortUrl('https://cdn.x/hls/eyJhbGciOiJIUzI1NiJ9abc123def456/1080/index.m3u8#token=zzz');
+  assert.ok(!out.includes('eyJhbGciOiJIUzI1NiJ9abc123def456') && !out.includes('zzz'), out);
+  assert.equal(out, 'cdn.x/hls/eyJhbG…/1080/index.m3u8');
+  assert.equal(shortUrl('https://animexin.dev/renegade-immortal-episode-12/'), 'animexin.dev/renegade-immortal-episode-12/');
+});
+
+test('shortUrl keeps slugs but shortens Dailymotion-style path tokens', () => {
+  const dm = shortUrl('https://vod3.cf.dmcdn.net/sec2(OE3rgxMlV5ocwKI-qEifvdG3IxvieIwA9Z1Ld5qTRhxQ)/video/1.m4s');
+  assert.ok(!dm.includes('OE3rgxMlV5ocwKI'), dm);
+});

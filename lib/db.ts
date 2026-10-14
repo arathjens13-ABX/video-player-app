@@ -78,8 +78,29 @@ export function subscribe(listener: Listener) {
   };
 }
 
+let batchDepth = 0;
+let pendingNotify = false;
+
 export function notify() {
+  if (batchDepth > 0) {
+    pendingNotify = true;
+    return;
+  }
   listeners.forEach((l) => l());
+}
+
+/** Runs many changes in one transaction and tells screens to refresh once, at the end. */
+export function batch(fn: () => void) {
+  batchDepth++;
+  try {
+    db.withTransactionSync(fn);
+  } finally {
+    batchDepth--;
+    if (batchDepth === 0 && pendingNotify) {
+      pendingNotify = false;
+      notify();
+    }
+  }
 }
 
 export function listEpisodes(): Episode[] {

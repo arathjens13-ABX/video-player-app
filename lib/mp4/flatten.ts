@@ -70,7 +70,7 @@ export class FlatMp4Writer {
 
   /** Registers the tracks of an init segment. Adding the same stream again is ignored. */
   addInit(stream: string, init: Uint8Array) {
-    if (this.order.length > 0 && [...this.tracks.keys()].some((k) => k.startsWith(stream + ':'))) return;
+    const known = [...this.tracks.keys()].some((k) => k.startsWith(stream + ':'));
     const moov = readBoxes(init).find((b) => b.type === 'moov');
     if (!moov) throw new Error('Init segment has no moov box');
     const trexById = new Map<number, Trex>();
@@ -95,6 +95,15 @@ export class FlatMp4Writer {
 
       const tkhdV = init[tkhd.dataStart];
       const trackId = readU32(init, tkhd.dataStart + (tkhdV === 1 ? 20 : 12));
+      if (known) {
+        // The same stream again (MPEG-TS conversion repeats it with every piece). Its sample
+        // description must not change: a new resolution or codec setup can't share one track.
+        const existing = this.tracks.get(`${stream}:${trackId}`);
+        if (existing && !sameBytes(existing.stsd, init.subarray(stsd.start, stsd.end))) {
+          throw new Error('This stream changes format partway through (often inserted ads), which the app can’t save yet');
+        }
+        continue;
+      }
       const mdhdV = init[mdhd.dataStart];
       const timescale = readU32(init, mdhd.dataStart + (mdhdV === 1 ? 20 : 12));
       const language = (init[mdhd.dataStart + (mdhdV === 1 ? 32 : 20)] << 8) | init[mdhd.dataStart + (mdhdV === 1 ? 33 : 21)];
@@ -183,6 +192,13 @@ export class FlatMp4Writer {
       let dts = 0;
       if (tfdt) dts = b[tfdt.dataStart] === 1 ? readU64(b, tfdt.dataStart + 4) : readU32(b, tfdt.dataStart + 4);
       if (track.firstDts === null) track.firstDts = dts;
+      else if (tfdt && track.sizes.length > 0) {
+        // Follow the source's timeline across fragments: a gap or overlap between fragments is
+        // absorbed into the previous sample's duration, so tracks don't drift apart over an episode.
+        // Jumps beyond 10 s are discontinuities (timestamp resets), not gaps: ignore those.
+        const delta = dts - (track.firstDts + track.duration);
+        if (delta !== 0 && Math.abs(delta) <= track.timescale * 10) adjustLastDuration(track, delta);
+      }
       // Decode time relative to the track's start, for composition-time bookkeeping.
       let relDts = track.duration;
 
@@ -364,6 +380,26 @@ export class FlatMp4Writer {
     for (const c of t.chunks) (large ? w.u64(c.offset) : w.u32(c.offset));
     return fullBox(large ? 'co64' : 'stco', 0, 0, w.result());
   }
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** Lengthens (or shortens, never below 1) the most recent sample. */
+function adjustLastDuration(t: Track, delta: number) {
+  const last = t.stts[t.stts.length - 1];
+  const next = Math.max(1, last[1] + delta);
+  const applied = next - last[1];
+  if (last[0] > 1) {
+    last[0]--;
+    t.stts.push([1, next]);
+  } else {
+    last[1] = next;
+  }
+  t.duration += applied;
 }
 
 /** Media time (relative to the track's first decode time) at which presentation starts. */

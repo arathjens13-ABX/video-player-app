@@ -83,6 +83,8 @@ export const DETECTOR_JS = String.raw`
 
   function isTextual(ct) {
     ct = (ct || '').toLowerCase();
+    // Never live streams (server-sent events, NDJSON feeds): reading them never ends.
+    if (ct.indexOf('event-stream') >= 0 || ct.indexOf('ndjson') >= 0 || ct.indexOf('stream+json') >= 0) return false;
     return ct.indexOf('json') >= 0 || ct.indexOf('javascript') >= 0 || ct.indexOf('text/') === 0;
   }
 

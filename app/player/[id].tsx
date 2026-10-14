@@ -27,11 +27,11 @@ const UP_NEXT_SECONDS = 5;
 
 function Player({ episodeId }: { episodeId: number }) {
   // Read once: re-rendering on every position save would reset the player.
-  const episode = useRef(getEpisode(episodeId)).current;
+  const [episode] = useState(() => getEpisode(episodeId));
   const uri = episode ? videoFile(episode).uri : null;
 
   const player = useVideoPlayer(uri ? { uri, metadata: { title: episode?.title, artist: episode?.show } } : null, (p) => {
-    p.timeUpdateEventInterval = 5;
+    p.timeUpdateEventInterval = 2;
     p.showNowPlayingNotification = true;
     p.staysActiveInBackground = true;
     p.play();
@@ -59,6 +59,21 @@ function Player({ episodeId }: { episodeId: number }) {
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     savePosition(currentTime);
   });
+
+  // Pausing (or scrubbing while paused) saves right away, not at the next tick.
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    if (!isPlaying) savePosition(player.currentTime);
+  });
+
+  function close() {
+    // Save while the player still exists; by the time this screen unmounts it has been released.
+    try {
+      savePosition(player.currentTime);
+    } catch {
+      // Already released.
+    }
+    router.back();
+  }
 
   const [upNext, setUpNext] = useState<{ episode: Episode; seconds: number } | null>(null);
   useEventListener(player, 'playToEnd', () => {
@@ -132,7 +147,7 @@ function Player({ episodeId }: { episodeId: number }) {
         </View>
       ) : null}
       <SafeAreaView style={styles.closeWrap} edges={['top', 'left']} pointerEvents="box-none">
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.close}>
+        <Pressable onPress={close} hitSlop={12} style={styles.close}>
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
       </SafeAreaView>

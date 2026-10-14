@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 
 import { formatBytes, formatDuration } from '@/lib/format';
+import type { Server } from '@/lib/detector-messages';
 import { hostOf } from '@/lib/links';
 import type { Candidate, ProbeResult } from '@/lib/probe';
 import { probeStatus, subscribeProbes } from '@/lib/probe-store';
@@ -9,7 +10,6 @@ import { probeStatus, subscribeProbes } from '@/lib/probe-store';
 import { Text, View } from './Themed';
 import { useColors } from './useColors';
 
-export type Server = { label: string; url: string };
 
 function useProbe(c: Candidate): ProbeResult | null {
   const [, rerender] = useState(0);

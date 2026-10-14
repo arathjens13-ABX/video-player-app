@@ -11,8 +11,9 @@ import {
   type DownloadKind,
   type Episode,
 } from './db';
-import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir } from './fs-io';
+import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir, partsRoot } from './fs-io';
 import { formatBytes } from './format';
+import { requestHeaders } from './http';
 import { assemble, downloadParts, partsSize, planFingerprint, planStream } from './hls-download';
 import { logError, logInfo, logWarn, shortUrl } from './log';
 import { getStreamQuality } from './settings';
@@ -48,16 +49,7 @@ export type NewDownload = {
 };
 
 function headersFor(referer: string | null | undefined) {
-  const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
-  if (referer) {
-    headers.Referer = referer;
-    try {
-      headers.Origin = new URL(referer).origin;
-    } catch {
-      // Ignore a malformed referer; the Referer header alone is still sent.
-    }
-  }
-  return headers;
+  return requestHeaders(referer, USER_AGENT);
 }
 
 export function enqueue(d: NewDownload) {
@@ -440,7 +432,6 @@ export function remove(id: number) {
 export function cleanUpFiles(): number {
   const episodes = new Map(listEpisodes().map((e) => [e.id, e]));
   let freed = 0;
-  const partsRoot = new Directory(Paths.document, 'parts');
   try {
     if (partsRoot.exists) {
       for (const entry of partsRoot.list()) {
@@ -481,7 +472,6 @@ export function cleanUpFiles(): number {
 /** Space taken by pieces of unfinished stream downloads. */
 export function temporaryFilesSize(): number {
   try {
-    const partsRoot = new Directory(Paths.document, 'parts');
     return partsRoot.exists ? (partsRoot.size ?? 0) : 0;
   } catch {
     return 0;

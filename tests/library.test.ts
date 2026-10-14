@@ -34,3 +34,10 @@ test('nextEpisode follows the show order and skips unfinished downloads', () => 
   assert.equal(nextEpisode(all, all[0]), null);
   assert.equal(nextEpisode(all, all[3]), null);
 });
+
+test('shows differing only in case or spacing are one show', () => {
+  const groups = groupByShow([ep(1, 'Renegade Immortal', 'Episode 1'), ep(2, 'renegade  immortal ', 'Episode 2')]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].title, 'Renegade Immortal');
+  assert.equal(nextEpisode([ep(1, 'Renegade Immortal', 'Episode 1'), ep(2, 'renegade immortal', 'Episode 2')], ep(1, 'Renegade Immortal', 'Episode 1'))?.id, 2);
+});

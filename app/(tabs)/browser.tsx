@@ -3,13 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
-import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
+import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewNavigationEvent } from 'react-native-webview/lib/WebViewTypes';
 
-import { DetectedSheet, type Server } from '@/components/DetectedSheet';
+import { DetectedSheet } from '@/components/DetectedSheet';
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import { addressToUrl, sameSite, shouldBlockNavigation } from '@/lib/browser';
 import { DETECTOR_JS, switchServerJs } from '@/lib/detector';
+import { parseDetectorMessage, type Server } from '@/lib/detector-messages';
 import { hostOf } from '@/lib/links';
 import { candidateKey, type Candidate } from '@/lib/probe';
 import { relink } from '@/lib/downloads';
@@ -21,10 +22,6 @@ import { USER_AGENT } from '@/lib/ua';
 
 const SUGGESTED: RecentSite[] = [{ url: 'https://animexin.dev/', title: 'AnimeXin' }];
 
-type DetectorMessage =
-  | { type: 'media'; url: string; kind: 'hls' | 'file'; via: string; frame: string }
-  | { type: 'servers'; servers: Server[] }
-  | { type: 'page'; title: string; url: string };
 
 export default function BrowserScreen() {
   const colors = useColors();
@@ -89,12 +86,9 @@ export default function BrowserScreen() {
   }
 
   function onMessage(e: WebViewMessageEvent) {
-    let msg: DetectorMessage;
-    try {
-      msg = JSON.parse(e.nativeEvent.data);
-    } catch {
-      return;
-    }
+    // Any page or iframe can post here, so only well-formed detector messages are accepted.
+    const msg = parseDetectorMessage(e.nativeEvent.data);
+    if (!msg) return;
     if (msg.type === 'media') {
       const candidate = { url: msg.url, kind: msg.kind, frame: msg.frame, via: msg.via };
       const key = candidateKey(msg.url);
@@ -123,26 +117,36 @@ export default function BrowserScreen() {
     }
   }
 
-  function onNavigationStateChange(state: WebViewNavigation) {
-    // A real page load (not an in-page URL change) starts a fresh detector, so drop the old page's finds.
-    const newPageLoad = state.loading && currentUrl.current !== null && !samePage(currentUrl.current, state.url);
-    if (newPageLoad) {
+  // Load start/end come only from top-level page loads. (The navigation-state event's `loading`
+  // flag can't be trusted for this on iOS: at the start of a load it still describes the old page.)
+  function onLoadStart(e: WebViewNavigationEvent) {
+    const url = e.nativeEvent.url;
+    if (currentUrl.current !== null && !samePage(currentUrl.current, url)) {
+      // A new page gets a fresh detector, so drop the old page's finds.
       candidateKeys.current.clear();
       serverCount.current = -1;
       setCandidates([]);
       setServers([]);
     }
-    currentUrl.current = state.url;
-    setNav({ canGoBack: state.canGoBack, canGoForward: state.canGoForward, loading: state.loading, url: state.url, title: state.title });
-    if (!editing) setAddress(state.url);
-    if (!state.loading) {
-      userTyped.current = false;
-      rememberVisit(state.url, state.title);
-      if (lastLoggedPage.current !== state.url) {
-        lastLoggedPage.current = state.url;
-        logInfo('browser', `loaded ${shortUrl(state.url)}`);
-      }
+    setNav((n) => ({ ...n, loading: true }));
+  }
+
+  function onLoadEnd(e: WebViewNavigationEvent | WebViewErrorEvent) {
+    const { url, title } = e.nativeEvent;
+    setNav((n) => ({ ...n, loading: false }));
+    // The address the user typed (and its redirects) has finished loading.
+    userTyped.current = false;
+    rememberVisit(url, title);
+    if (lastLoggedPage.current !== url) {
+      lastLoggedPage.current = url;
+      logInfo('browser', `loaded ${shortUrl(url)}`);
     }
+  }
+
+  function onNavigationStateChange(state: WebViewNavigation) {
+    currentUrl.current = state.url;
+    setNav((n) => ({ ...n, canGoBack: state.canGoBack, canGoForward: state.canGoForward, url: state.url, title: state.title }));
+    if (!editing) setAddress(state.url);
   }
 
   function onShouldStartLoad(req: ShouldStartLoadRequest) {
@@ -259,6 +263,8 @@ export default function BrowserScreen() {
           injectedJavaScriptForMainFrameOnly={false}
           onMessage={onMessage}
           onNavigationStateChange={onNavigationStateChange}
+          onLoadStart={onLoadStart}
+          onLoadEnd={onLoadEnd}
           onShouldStartLoadWithRequest={onShouldStartLoad}
           onOpenWindow={(e) => {
             // Pop-ups are almost always ads; only follow ones that stay on the same site.

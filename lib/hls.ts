@@ -20,8 +20,8 @@ export type Segment = {
   url: string;
   duration: number;
   key?: Key;
-  /** EXT-X-MAP init section (fMP4 streams). */
-  map?: { url: string; byterange?: string };
+  /** EXT-X-MAP init section (fMP4 streams), with the key in force where it was declared. */
+  map?: { url: string; byterange?: string; key?: Key };
   byterange?: string;
   /** Media sequence number, used as the default AES IV. */
   sequence: number;
@@ -102,7 +102,7 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
       key = a.METHOD === 'NONE' ? undefined : { method: a.METHOD, url: a.URI && resolve(a.URI, baseUrl), iv: a.IV };
     } else if (line.startsWith('#EXT-X-MAP:')) {
       const a = parseAttributes(line.slice('#EXT-X-MAP:'.length));
-      map = { url: resolve(a.URI, baseUrl), byterange: a.BYTERANGE };
+      map = { url: resolve(a.URI, baseUrl), byterange: a.BYTERANGE, key };
     } else if (line.startsWith('#EXTINF:')) {
       pendingDuration = parseFloat(line.slice('#EXTINF:'.length)) || 0;
     } else if (line.startsWith('#EXT-X-BYTERANGE:')) {
@@ -129,14 +129,29 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
 /** The separate audio playlist a variant needs, preferring the default rendition. */
 export function audioFor(master: MasterPlaylist, variant: Variant): AudioRendition | undefined {
   if (!variant.audioGroup) return undefined;
-  const group = master.audio.filter((a) => a.groupId === variant.audioGroup && a.url);
-  return group.find((a) => a.isDefault) ?? group[0];
+  const group = master.audio.filter((a) => a.groupId === variant.audioGroup);
+  const preferred = group.find((a) => a.isDefault) ?? group[0];
+  // A rendition without a URI means its audio is already inside the video stream.
+  if (!preferred?.url) return undefined;
+  return preferred;
 }
 
-/** Picks the highest quality variant, optionally capped at a maximum height. */
+function isAudioOnly(v: Variant) {
+  return !v.height && !!v.codecs && !/avc|hvc|hev|vp0?9|av01|mp4v/i.test(v.codecs);
+}
+
+/**
+ * Picks the best variant at or below `maxHeight` (the closest lower one if none
+ * fit). Audio-only variants are never picked while video ones exist; when no
+ * variant states its resolution, the highest bitrate wins.
+ */
 export function pickVariant(variants: Variant[], maxHeight = Infinity): Variant | undefined {
-  const sorted = [...variants].sort((a, b) => (b.height ?? 0) - (a.height ?? 0) || b.bandwidth - a.bandwidth);
-  return sorted.find((v) => (v.height ?? 0) <= maxHeight) ?? sorted[sorted.length - 1];
+  const video = variants.filter((v) => !isAudioOnly(v));
+  const pool = video.length ? video : variants;
+  const sized = pool.filter((v) => v.height);
+  if (sized.length === 0) return [...pool].sort((a, b) => b.bandwidth - a.bandwidth)[0];
+  const sorted = [...sized].sort((a, b) => b.height! - a.height! || b.bandwidth - a.bandwidth);
+  return sorted.find((v) => v.height! <= maxHeight) ?? sorted[sorted.length - 1];
 }
 
 export type StreamInfo = {
@@ -148,11 +163,20 @@ export type StreamInfo = {
   unsupportedEncryption: boolean;
 };
 
-type Fetcher = (url: string) => Promise<string>;
+/**
+ * Fetches a playlist's text. May also return the final URL after redirects,
+ * which relative links in the playlist must be resolved against.
+ */
+export type FetchText = (url: string) => Promise<string | { text: string; url: string }>;
+
+export async function loadPlaylist(url: string, fetchText: FetchText): Promise<Playlist> {
+  const res = await fetchText(url);
+  return typeof res === 'string' ? parsePlaylist(res, url) : parsePlaylist(res.text, res.url || url);
+}
 
 /** Loads a playlist (following a master to its best variant) to describe the stream. */
-export async function describeStream(url: string, fetchText: Fetcher): Promise<StreamInfo> {
-  let playlist = parsePlaylist(await fetchText(url), url);
+export async function describeStream(url: string, fetchText: FetchText): Promise<StreamInfo> {
+  let playlist = await loadPlaylist(url, fetchText);
   let qualities: StreamInfo['qualities'] = [];
   if (playlist.type === 'master') {
     qualities = [...playlist.variants]
@@ -165,7 +189,7 @@ export async function describeStream(url: string, fetchText: Fetcher): Promise<S
       }));
     const best = pickVariant(playlist.variants);
     if (!best) throw new Error('Playlist has no streams');
-    playlist = parsePlaylist(await fetchText(best.url), best.url);
+    playlist = await loadPlaylist(best.url, fetchText);
     if (playlist.type !== 'media') throw new Error('Unexpected nested master playlist');
   }
   const methods = new Set(playlist.segments.map((s) => s.key?.method).filter(Boolean));

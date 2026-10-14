@@ -5,7 +5,7 @@ import { Alert, Pressable, SectionList, StyleSheet } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { Thumbnail } from '@/components/Thumbnail';
 import { useColors } from '@/components/useColors';
-import { updateEpisode, type Episode } from '@/lib/db';
+import { batch, updateEpisode, type Episode } from '@/lib/db';
 import { remove } from '@/lib/downloads';
 import { formatDuration } from '@/lib/format';
 import { groupByShow } from '@/lib/library';
@@ -42,7 +42,7 @@ export default function LibraryScreen() {
     Alert.alert(show, `${list.length} downloaded episode${list.length === 1 ? '' : 's'}`, [
       {
         text: unwatched > 0 ? 'Mark all as watched' : 'Mark all as unwatched',
-        onPress: () => list.forEach((e) => updateEpisode(e.id, { watched: unwatched > 0 ? 1 : 0, positionSec: 0 })),
+        onPress: () => batch(() => list.forEach((e) => updateEpisode(e.id, { watched: unwatched > 0 ? 1 : 0, positionSec: 0 }))),
       },
       ...(list.length - unwatched > 0
         ? [
@@ -52,7 +52,11 @@ export default function LibraryScreen() {
               onPress: () =>
                 Alert.alert('Delete watched episodes?', `${list.length - unwatched} video(s) will be removed from your phone.`, [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete', style: 'destructive', onPress: () => list.filter((e) => e.watched).forEach((e) => remove(e.id)) },
+                  {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => batch(() => list.filter((e) => e.watched).forEach((e) => remove(e.id))),
+                  },
                 ]),
             },
           ]
@@ -63,7 +67,7 @@ export default function LibraryScreen() {
         onPress: () =>
           Alert.alert(`Delete all of ${show}?`, `${list.length} video${list.length === 1 ? '' : 's'} will be removed from your phone.`, [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: () => list.forEach((e) => remove(e.id)) },
+            { text: 'Delete', style: 'destructive', onPress: () => batch(() => list.forEach((e) => remove(e.id))) },
           ]),
       },
       { text: 'Cancel', style: 'cancel' },

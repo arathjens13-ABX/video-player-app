@@ -11,7 +11,7 @@
  */
 
 import { decryptAes128Cbc } from './aes';
-import { audioFor, parsePlaylist, pickVariant, type Segment } from './hls';
+import { audioFor, loadPlaylist, pickVariant, type FetchText, type MediaPlaylist, type Segment } from './hls';
 import { readBoxes } from './mp4/boxes';
 import { FlatMp4Writer, type OutputSink } from './mp4/flatten';
 import { TsToFmp4 } from './mp4/transmux';
@@ -65,20 +65,32 @@ function partsFor(stream: string, segments: Segment[]) {
     const range = parseRange(s.byterange, next);
     if (range) next = range.offset + range.length;
     if (s.map && !initPart) {
-      initPart = { name: `${stream}-init`, url: s.map.url, range: parseRange(s.map.byterange, 0) };
+      // An init section can be encrypted by a key declared before it (with an explicit IV).
+      initPart = { name: `${stream}-init`, url: s.map.url, range: parseRange(s.map.byterange, 0), key: s.map.key, sequence: 0 };
     }
     return { name: `${stream}-${i}`, url: s.url, range, key: s.key, sequence: s.sequence };
   });
   return { stream, init: initPart, segments: parts };
 }
 
+/** Rejects media playlists the app can't turn into a file. */
+function checkMediaPlaylist(playlist: MediaPlaylist, what: string) {
+  if (!playlist.ended) throw new Error(`This is a live stream (${what}), which can’t be downloaded`);
+  if (playlist.segments.length === 0) throw new Error(`The stream’s ${what} is empty`);
+  const keys = [...playlist.segments.map((s) => s.key), ...playlist.segments.map((s) => s.map?.key)];
+  if (keys.some((k) => k && k.method !== 'AES-128')) {
+    throw new Error('This stream is DRM-protected and can’t be downloaded');
+  }
+  const maps = new Set(playlist.segments.map((s) => s.map?.url));
+  if (maps.size > 1) {
+    // Usually ads spliced into the stream with their own encoding; one MP4 can't hold both.
+    throw new Error('This stream changes format partway through (often inserted ads), which the app can’t save yet');
+  }
+}
+
 /** Reads the playlists and works out every piece to download. */
-export async function planStream(
-  url: string,
-  fetchText: (url: string) => Promise<string>,
-  maxHeight = 1080
-): Promise<StreamPlan> {
-  let playlist = parsePlaylist(await fetchText(url), url);
+export async function planStream(url: string, fetchText: FetchText, maxHeight = 1080): Promise<StreamPlan> {
+  let playlist = await loadPlaylist(url, fetchText);
   let audioUrl: string | undefined;
   let height: number | undefined;
   let bandwidth: number | undefined;
@@ -88,24 +100,17 @@ export async function planStream(
     height = variant.height;
     bandwidth = variant.bandwidth || undefined;
     audioUrl = audioFor(playlist, variant)?.url;
-    playlist = parsePlaylist(await fetchText(variant.url), variant.url);
+    playlist = await loadPlaylist(variant.url, fetchText);
   }
   if (playlist.type !== 'media') throw new Error('Unexpected playlist layout');
-  if (!playlist.ended) throw new Error('This is a live stream, which can’t be downloaded');
-  if (playlist.segments.some((s) => s.key && s.key.method !== 'AES-128')) {
-    throw new Error('This stream is DRM-protected and can’t be downloaded');
-  }
+  checkMediaPlaylist(playlist, 'video');
 
-  const maps = new Set(playlist.segments.map((s) => s.map?.url));
-  if (maps.size > 1) {
-    // Usually ads spliced into the stream with their own encoding; one MP4 can't hold both.
-    throw new Error('This stream changes format partway through (often inserted ads), which the app can’t save yet');
-  }
   const format = playlist.segments[0]?.map ? 'fmp4' : 'ts';
   const streams = [partsFor(audioUrl ? 'video' : 'main', playlist.segments)];
   if (audioUrl) {
-    const audio = parsePlaylist(await fetchText(audioUrl), audioUrl);
+    const audio = await loadPlaylist(audioUrl, fetchText);
     if (audio.type !== 'media') throw new Error('Unexpected audio playlist layout');
+    checkMediaPlaylist(audio, 'audio');
     if (format === 'ts' || !audio.segments[0]?.map) {
       throw new Error('This stream keeps its audio in a format the app can’t combine yet');
     }
@@ -136,19 +141,38 @@ function ivFor(part: Part): Uint8Array {
   return iv;
 }
 
-/** Catches error pages and other junk served in place of a piece of video, so it is retried, not saved. */
-function checkPart(format: StreamPlan['format'], part: Part, data: Uint8Array) {
-  const fail = () => {
+/**
+ * Finds where MPEG-TS packets start. Some CDNs disguise stream pieces as
+ * images by putting a PNG/JPEG/GIF header in front; players skip ahead to the
+ * first sync byte, and so do we. Returns -1 if this isn't TS at all.
+ */
+export function findTsStart(data: Uint8Array, searchLimit = 64 * 1024): number {
+  const limit = Math.min(searchLimit, data.length - 188 * 2);
+  for (let k = 0; k <= limit; k++) {
+    if (data[k] === 0x47 && data[k + 188] === 0x47 && data[k + 376] === 0x47) return k;
+  }
+  // A piece shorter than three packets: accept a sync byte at the start.
+  return data[0] === 0x47 ? 0 : -1;
+}
+
+/**
+ * Catches error pages and other junk served in place of a piece of video, so
+ * it is retried rather than saved. Returns the piece, minus any disguise.
+ */
+function checkPart(format: StreamPlan['format'], part: Part, data: Uint8Array): Uint8Array {
+  const fail = (): never => {
     throw new Error('The server sent something that isn’t video (the link may have expired)');
   };
   if (data.length < 8) fail();
   if (format === 'ts') {
-    if (data[0] !== 0x47) fail(); // MPEG-TS sync byte
-  } else {
-    const types = readBoxes(data).map((b) => b.type);
-    const expected = part.name.endsWith('-init') ? 'moov' : 'moof';
-    if (!types.includes(expected)) fail();
+    const start = findTsStart(data);
+    if (start < 0) fail();
+    return start > 0 ? data.subarray(start) : data;
   }
+  const types = readBoxes(data).map((b) => b.type);
+  const expected = part.name.endsWith('-init') ? 'moov' : 'moof';
+  if (!types.includes(expected)) fail();
+  return data;
 }
 
 export type DownloadProgress = { done: number; total: number; bytes: number };
@@ -209,8 +233,7 @@ export async function downloadParts(
         throw new Error('A piece of the stream couldn’t be decrypted');
       }
     }
-    checkPart(plan.format, part, data);
-    return data;
+    return checkPart(plan.format, part, data);
   }
 
   const ATTEMPTS = 4;
@@ -237,21 +260,24 @@ export async function downloadParts(
   }
 
   const n = Math.max(1, Math.min(opts.concurrency ?? 4, queue.length));
+  // The failure that stopped the download. Errors from the requests it cancelled don't count:
+  // they can't be told apart by type (expo/fetch reports cancellations as plain Errors).
+  let firstFailure: { error: unknown } | null = null;
   // Wait for every worker to stop before reporting, so nothing writes to the store afterwards.
   const results = await Promise.allSettled(
     Array.from({ length: n }, () =>
       worker().catch((e) => {
+        if (!signal.aborted) firstFailure ??= { error: e };
         stop.abort();
         throw e;
       })
     )
   );
   opts.signal?.removeEventListener('abort', onOuterAbort);
-  // Report the error that started it, not the cancellations it caused.
-  const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => r.reason as unknown);
-  const real = errors.find((e) => !(e instanceof Error && e.name === 'AbortError'));
-  if (real !== undefined) throw real;
-  if (errors.length > 0) throw errors[0];
+  if (firstFailure) throw (firstFailure as { error: unknown }).error;
+  if (opts.signal?.aborted) throw abortError();
+  const rejected = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (rejected) throw rejected.reason;
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -298,10 +324,31 @@ export type AssembleOptions = {
 export async function assemble(plan: StreamPlan, store: PartStore, sink: OutputSink, opts: AssembleOptions = {}): Promise<number> {
   const writer = new FlatMp4Writer(sink);
   const longest = Math.max(...plan.streams.map((s) => s.segments.length));
-  const take = (name: string) => store.read(name);
+  // A piece that breaks assembly is deleted, so a retry downloads it again instead of failing on it forever.
+  let current = '';
+  const take = (name: string) => {
+    current = name;
+    return store.read(name);
+  };
   const done = (name: string) => {
     if (opts.consumeParts) store.remove(name);
   };
+  try {
+    return await assembleParts(plan, writer, longest, take, done, opts);
+  } catch (e) {
+    if (!(e instanceof Error && e.name === 'AbortError') && current && store.has(current)) store.remove(current);
+    throw e;
+  }
+}
+
+async function assembleParts(
+  plan: StreamPlan,
+  writer: FlatMp4Writer,
+  longest: number,
+  take: (name: string) => Uint8Array,
+  done: (name: string) => void,
+  opts: AssembleOptions
+): Promise<number> {
   const step = async (i: number) => {
     opts.onProgress?.((i + 1) / longest);
     await tick();

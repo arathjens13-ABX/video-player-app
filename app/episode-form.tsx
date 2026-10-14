@@ -1,5 +1,5 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
@@ -23,8 +23,10 @@ export default function EpisodeForm() {
     pageUrl?: string;
   }>();
   const colors = useColors();
-  const existing = params.id ? getEpisode(Number(params.id)) : null;
-  const guessed = params.url ? bestGuess([params.pageTitle, params.pageUrl, params.url]) : null;
+  // Computed once, not on every keystroke.
+  const [existing] = useState(() => (params.id ? getEpisode(Number(params.id)) : null));
+  const [guessed] = useState(() => (params.url ? bestGuess([params.pageTitle, params.pageUrl, params.url]) : null));
+  const saved = useRef(false);
   const isStream = !existing && params.kind === 'hls';
 
   const [show, setShow] = useState(existing?.show ?? guessed?.show ?? '');
@@ -33,6 +35,9 @@ export default function EpisodeForm() {
   const [quality, setQuality] = useState<StreamQuality>(getStreamQuality);
 
   function save() {
+    // A double tap must not add the download twice.
+    if (saved.current) return;
+    saved.current = true;
     const cleanShow = show.trim() || 'Unsorted';
     const cleanTitle = title.trim() || 'Untitled';
     if (existing) {

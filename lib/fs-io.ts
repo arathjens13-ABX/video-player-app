@@ -4,9 +4,14 @@ import { Directory, File, FileMode, Paths, type FileHandle } from 'expo-file-sys
 import type { FetchBytes, PartStore } from './hls-download';
 import type { OutputSink } from './mp4/flatten';
 
-/** Pieces of a stream download, kept in Documents so iOS doesn't purge them mid-download. */
+/**
+ * Where stream pieces wait to be assembled: under Documents so iOS doesn't purge
+ * them mid-download, in a hidden folder so they stay out of the Files app.
+ */
+export const partsRoot = new Directory(Paths.document, '.parts');
+
 export function partsDir(episodeId: number) {
-  return new Directory(Paths.document, 'parts', String(episodeId));
+  return new Directory(partsRoot, String(episodeId));
 }
 
 export class FilePartStore implements PartStore {
@@ -82,13 +87,19 @@ export class FileSink implements OutputSink {
 export const fetchBytes: FetchBytes = async (url, headers, signal) => {
   const res = await fetch(url, { headers, signal });
   if (!res.ok) throw new Error(`The server answered ${res.status}`);
+  // A host that ignores Range would send the whole file for every piece.
+  if (headers.Range && res.status !== 206) {
+    res.body?.cancel?.().catch(() => {});
+    throw new Error('The server doesn’t support partial downloads, which this stream needs');
+  }
   return new Uint8Array(await res.arrayBuffer());
 };
 
+/** Fetches a playlist, reporting the final URL after redirects (relative links resolve against it). */
 export function fetchText(headers: Record<string, string>, signal?: AbortSignal) {
   return async (url: string) => {
     const res = await fetch(url, { headers, signal });
     if (!res.ok) throw new Error(`The server answered ${res.status}`);
-    return res.text();
+    return { text: await res.text(), url: res.url || url };
   };
 }

@@ -1,4 +1,5 @@
 import { describeStream, type StreamInfo } from './hls';
+import { requestHeaders, withTimeout } from './http';
 import { URL } from './url';
 
 export type Candidate = {
@@ -14,47 +15,27 @@ export type ProbeResult =
   | { status: 'ok'; kind: 'file'; size: number | null; contentType: string | null }
   | { status: 'invalid'; reason: string };
 
-export function requestHeaders(c: Pick<Candidate, 'frame'>, userAgent: string): Record<string, string> {
-  const headers: Record<string, string> = { 'User-Agent': userAgent };
-  try {
-    const frame = new URL(c.frame);
-    headers.Referer = c.frame;
-    headers.Origin = frame.origin;
-  } catch {
-    // No usable frame URL; send the User-Agent only.
-  }
-  return headers;
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit, ms = 10000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /**
  * Checks a detected URL before offering it: streams must parse as real
  * playlists (players also request ad configs from ".m3u8" URLs), and files must
  * not be web pages. Also gathers the duration, qualities or size to show.
  */
 export async function probe(c: Candidate, userAgent: string): Promise<ProbeResult> {
-  const headers = requestHeaders(c, userAgent);
+  const headers = requestHeaders(c.frame, userAgent);
   try {
     if (c.kind === 'hls') {
-      const info = await describeStream(c.url, async (url) => {
-        const res = await fetchWithTimeout(url, { headers });
-        if (!res.ok) throw new Error(`The server answered ${res.status}`);
-        return res.text();
-      });
+      const info = await describeStream(c.url, (url) =>
+        withTimeout(10000, async (signal) => {
+          const res = await fetch(url, { headers, signal });
+          if (!res.ok) throw new Error(`The server answered ${res.status}`);
+          return { text: await res.text(), url: res.url || url };
+        })
+      );
       if (info.duration <= 0) return { status: 'invalid', reason: 'Empty stream' };
       if (info.unsupportedEncryption) return { status: 'invalid', reason: 'Protected stream (DRM)' };
       return { status: 'ok', kind: 'hls', info };
     }
-    const res = await fetchWithTimeout(c.url, { headers: { ...headers, Range: 'bytes=0-0' } });
+    const res = await withTimeout(10000, (signal) => fetch(c.url, { headers: { ...headers, Range: 'bytes=0-0' }, signal }));
     const contentType = res.headers.get('content-type');
     // Don't download the body; one byte (or a whole small error page) is plenty.
     res.body?.cancel?.().catch(() => {});
@@ -66,8 +47,7 @@ export async function probe(c: Candidate, userAgent: string): Promise<ProbeResul
     const total = range?.match(/\/(\d+)$/)?.[1] ?? (res.status === 200 ? res.headers.get('content-length') : null);
     return { status: 'ok', kind: 'file', size: total ? Number(total) : null, contentType };
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { status: 'invalid', reason: message.includes('abort') ? 'Timed out' : message };
+    return { status: 'invalid', reason: e instanceof Error ? e.message : String(e) };
   }
 }
 
