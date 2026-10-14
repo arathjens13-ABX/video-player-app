@@ -216,11 +216,18 @@ test('plan fingerprints ignore signed query strings but not quality or layout', 
 
 test('a piece that keeps failing stops the whole download cleanly', async () => {
   const slow = fixtureFetch({ fail: (u) => u.endsWith('video/seg1.m4s') });
-  const delayed: FetchBytes = async (u, h, signal) => {
-    await new Promise((r) => setTimeout(r, 40));
-    if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
-    return slow.fetchBytes(u, h, signal);
-  };
+  // The failing piece fails fast; every other request is slow, so it is still in flight when the
+  // download gives up and gets cancelled. Like expo/fetch on a phone, a cancelled request fails with
+  // a plain Error, not an AbortError.
+  const delayed: FetchBytes = (u, h, signal) =>
+    new Promise((resolve, reject) => {
+      if (u.endsWith('video/seg1.m4s')) return reject(new Error('network down'));
+      const timer = setTimeout(() => slow.fetchBytes(u, h, signal).then(resolve, reject), 6000);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new Error('fetch failed: Fetch request has been canceled'));
+      });
+    });
   const plan = await planStream(BASE + 'fmp4-split/master.m3u8', slow.fetchText);
   const base = new DirStore(tempDir());
   let writesAfterFailure = 0;
