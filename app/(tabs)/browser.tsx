@@ -12,6 +12,7 @@ import { addressToUrl, sameSite, shouldBlockNavigation } from '@/lib/browser';
 import { DETECTOR_JS, switchServerJs } from '@/lib/detector';
 import { candidateKey, type Candidate } from '@/lib/probe';
 import { relink } from '@/lib/downloads';
+import { logInfo, logWarn, shortUrl } from '@/lib/log';
 import { onOpenInBrowser, type BrowserRequest } from '@/lib/open-in-browser';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
 import { loadRecent, rememberVisit, type RecentSite } from '@/lib/recent';
@@ -43,6 +44,10 @@ export default function BrowserScreen() {
   // Allow-list for one navigation after the user taps "Open anyway".
   const allowOnce = useRef<string | null>(null);
   const sourceUri = useRef<string | null>(null);
+  // For diagnostics: what has already been logged for the current page.
+  const candidateKeys = useRef(new Set<string>());
+  const serverCount = useRef(-1);
+  const lastLoggedPage = useRef<string | null>(null);
 
   const [relinking, setRelinking] = useState<BrowserRequest['relink'] | null>(null);
 
@@ -90,6 +95,10 @@ export default function BrowserScreen() {
     }
     if (msg.type === 'media') {
       const candidate = { url: msg.url, kind: msg.kind, frame: msg.frame, via: msg.via };
+      if (!candidateKeys.current.has(candidateKey(msg.url))) {
+        candidateKeys.current.add(candidateKey(msg.url));
+        logInfo('detect', `found ${msg.kind} via ${msg.via} in ${hostOf(msg.frame)}: ${shortUrl(msg.url)}`);
+      }
       startProbe(candidate);
       // Same stream with a fresh token replaces the old entry rather than adding another.
       const key = candidateKey(msg.url);
@@ -102,6 +111,10 @@ export default function BrowserScreen() {
         return next;
       });
     } else if (msg.type === 'servers') {
+      if (msg.servers.length !== serverCount.current) {
+        serverCount.current = msg.servers.length;
+        logInfo('detect', `${msg.servers.length} servers: ${msg.servers.map((x) => hostOf(x.url)).join(', ')}`);
+      }
       setServers(msg.servers);
     } else if (msg.type === 'page') {
       setNav((n) => (n.title === msg.title ? n : { ...n, title: msg.title }));
@@ -112,6 +125,8 @@ export default function BrowserScreen() {
     // A real page load (not an in-page URL change) starts a fresh detector, so drop the old page's finds.
     const newPageLoad = state.loading && currentUrl.current !== null && !samePage(currentUrl.current, state.url);
     if (newPageLoad) {
+      candidateKeys.current.clear();
+      serverCount.current = -1;
       setCandidates([]);
       setServers([]);
     }
@@ -121,6 +136,10 @@ export default function BrowserScreen() {
     if (!state.loading) {
       userTyped.current = false;
       rememberVisit(state.url, state.title);
+      if (lastLoggedPage.current !== state.url) {
+        lastLoggedPage.current = state.url;
+        logInfo('browser', `loaded ${shortUrl(state.url)}`);
+      }
     }
   }
 
@@ -137,7 +156,10 @@ export default function BrowserScreen() {
       navigationType: req.navigationType,
       userTyped: userTyped.current,
     });
-    if (block) setBlocked(req.url);
+    if (block) {
+      logInfo('browser', `blocked redirect to ${shortUrl(req.url, 80)}`);
+      setBlocked(req.url);
+    }
     return !block;
   }
 
@@ -162,6 +184,7 @@ export default function BrowserScreen() {
   }
 
   function switchServer(s: Server) {
+    logInfo('browser', `switch server → ${s.label} (${hostOf(s.url)})`);
     setSheetOpen(false);
     // Keep earlier finds: they're still downloadable, and the page won't report them twice.
     webview.current?.injectJavaScript(switchServerJs(s.url));
@@ -239,9 +262,17 @@ export default function BrowserScreen() {
             // Pop-ups are almost always ads; only follow ones that stay on the same site.
             const target = e.nativeEvent.targetUrl;
             if (currentUrl.current && sameSite(target, currentUrl.current)) open(target);
-            else setBlocked(target);
+            else {
+              logInfo('browser', `blocked pop-up ${shortUrl(target, 80)}`);
+              setBlocked(target);
+            }
           }}
-          onContentProcessDidTerminate={() => webview.current?.reload()}
+          onContentProcessDidTerminate={() => {
+            logWarn('browser', 'web content process crashed; reloading');
+            webview.current?.reload();
+          }}
+          onError={(e) => logWarn('browser', `load error ${e.nativeEvent.code}: ${e.nativeEvent.description} (${shortUrl(e.nativeEvent.url)})`)}
+          onHttpError={(e) => logWarn('browser', `HTTP ${e.nativeEvent.statusCode} for ${shortUrl(e.nativeEvent.url)}`)}
           allowsInlineMediaPlayback
           allowsFullscreenVideo
           allowsBackForwardNavigationGestures

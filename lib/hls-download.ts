@@ -163,7 +163,13 @@ export async function downloadParts(
   store: PartStore,
   fetchBytes: FetchBytes,
   headers: Record<string, string>,
-  opts: { concurrency?: number; signal?: AbortSignal; onProgress?: (p: DownloadProgress) => void } = {}
+  opts: {
+    concurrency?: number;
+    signal?: AbortSignal;
+    onProgress?: (p: DownloadProgress) => void;
+    /** Called when a part fails and is about to be retried (for diagnostics). */
+    onRetry?: (part: string, attempt: number, error: unknown) => void;
+  } = {}
 ) {
   const parts = allParts(plan);
   const keys = new Map<string, Promise<Uint8Array>>();
@@ -217,6 +223,7 @@ export async function downloadParts(
         } catch (e) {
           lastError = e;
           if (opts.signal?.aborted) throw e;
+          opts.onRetry?.(part.name, attempt + 1, e);
           await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
         }
       }

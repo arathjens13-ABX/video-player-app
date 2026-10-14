@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getEpisode, listEpisodes, notify, updateEpisode, type Episode } from '@/lib/db';
 import { videoFile } from '@/lib/downloads';
 import { nextEpisode } from '@/lib/library';
+import { logError, logInfo } from '@/lib/log';
 
 function playEpisode(id: number) {
   router.replace({ pathname: '/player/[id]', params: { id } });
@@ -37,14 +38,22 @@ function Player({ episodeId }: { episodeId: number }) {
   });
 
   const resumed = useRef(false);
-  useEventListener(player, 'sourceLoad', ({ duration }) => {
+  useEventListener(player, 'sourceLoad', ({ duration, availableVideoTracks, availableAudioTracks }) => {
     if (!episode) return;
+    logInfo(
+      'player',
+      `#${episode.id} loaded ${Math.round(duration)}s, ${availableVideoTracks?.length ?? '?'} video / ${availableAudioTracks?.length ?? '?'} audio tracks`
+    );
     if (duration > 0) updateEpisode(episode.id, { durationSec: duration }, { silent: true });
     // Resume where we left off, unless that was the very end.
     if (!resumed.current && episode.positionSec > 5 && episode.positionSec < duration - 10) {
       player.currentTime = episode.positionSec;
     }
     resumed.current = true;
+  });
+
+  useEventListener(player, 'statusChange', ({ status, error }) => {
+    if (status === 'error') logError('player', `#${episodeId} can't play: ${error?.message ?? 'unknown error'}`);
   });
 
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {

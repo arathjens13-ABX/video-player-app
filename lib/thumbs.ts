@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { getThumbnailAsync } from 'expo-video-thumbnails';
 
 import type { Episode } from './db';
+import { logWarn } from './log';
 
 export const thumbsDir = new Directory(Paths.document, 'thumbs');
 
@@ -32,8 +33,9 @@ export function ensureThumbnail(episode: Pick<Episode, 'id' | 'durationSec'>, vi
         if (target.exists) target.delete();
         await new File(uri).move(target);
         return true;
-      } catch {
+      } catch (e) {
         // Too far in for a short video, or an unreadable frame: try the start.
+        logWarn('thumbs', `#${episode.id} at ${Math.round(time / 1000)}s:`, e);
       }
     }
     return false;

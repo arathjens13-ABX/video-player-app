@@ -130,12 +130,15 @@ Now in Safari tap **Share → Send to VidStash**.
 | Download error mentions 403 / expired | Tap **Find again** on the download. |
 | "Not enough free space" | Delete watched episodes (long-press a show in Library) or pick a lower quality. |
 | Stream download stopped when I left the app | Normal for streams. Open VidStash again and it continues. |
+| Anything else odd | Settings → Diagnostics → **Share report** and send it to me. |
 
 ---
 
 ## Please tell me (for the next round of fixes)
 
-After you've tried it, tell me:
+After you've tried it, go to **Settings → Diagnostics → Share report** (or **Copy report**) and send me the report. It records what the browser found on each page, why links were rejected, and exactly how each download went, so I can fix things without guessing. If you want a clean report for one specific problem, tap **Clear** first, reproduce the problem, then share.
+
+Also tell me:
 
 1. Did SideStore and VidStash install OK?
 2. On an AnimeXin episode: **which servers showed "video found"**, and which didn't?

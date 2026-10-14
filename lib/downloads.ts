@@ -14,6 +14,7 @@ import {
 import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir } from './fs-io';
 import { formatBytes } from './format';
 import { assemble, downloadParts, partsSize, planFingerprint, planStream } from './hls-download';
+import { logError, logInfo, logWarn, shortUrl } from './log';
 import { getStreamQuality } from './settings';
 import { deleteThumbnail, ensureThumbnail, thumbsDir } from './thumbs';
 import { sniffVideo, type SniffResult } from './sniff';
@@ -72,6 +73,7 @@ export function enqueue(d: NewDownload) {
     kind: d.kind,
     maxHeight: d.kind === 'hls' ? (d.maxHeight ?? getStreamQuality()) : null,
   });
+  logInfo('queue', `#${id} added ${d.kind} ${shortUrl(d.url)} referer=${d.referer ? shortUrl(d.referer, 60) : 'none'}`);
   pump();
   return id;
 }
@@ -88,6 +90,7 @@ export function relink(id: number, d: { url: string; kind: DownloadKind; referer
     setTimeout(() => removing.delete(id), 5000);
   }
   progress.delete(id);
+  logInfo('queue', `#${id} relinked to ${d.kind} ${shortUrl(d.url)}`);
   updateEpisode(id, {
     sourceUrl: d.url,
     kind: d.kind,
@@ -116,6 +119,7 @@ function pump() {
 type Job = { pause(): void; cancel(): void };
 
 function start(episode: Episode) {
+  logInfo('download', `#${episode.id} start ${episode.kind}${episode.maxHeight ? ` ≤${episode.maxHeight}p` : ''} ${shortUrl(episode.sourceUrl)}`);
   updateEpisode(episode.id, { status: 'downloading', error: null });
   const job = episode.kind === 'hls' ? startStream(episode) : startFile(episode);
   active.set(episode.id, job);
@@ -131,6 +135,7 @@ function finished(id: number) {
 
 function failed(id: number, err: unknown, patch: Partial<Episode> = {}) {
   if (removing.has(id)) return;
+  logError('download', `#${id} failed:`, err);
   updateEpisode(id, { status: 'error', error: explainError(err), ...patch });
 }
 
@@ -176,10 +181,12 @@ function startFile(episode: Episode): Job {
           } catch {
             // Leaving the bad file is harmless; it is overwritten on retry.
           }
+          logError('download', `#${episode.id} finished file is not a video (${file.size ?? 0} bytes): ${check.reason}`);
           updateEpisode(episode.id, { status: 'error', error: check.reason, resumeJson: null, bytesWritten: 0 });
           return;
         }
         const size = file.size ?? 0;
+        logInfo('download', `#${episode.id} done ${formatBytes(size)}`);
         updateEpisode(episode.id, {
           status: 'done',
           bytesWritten: size,
@@ -195,6 +202,7 @@ function startFile(episode: Episode): Job {
         } catch {
           // No resume data; the download will restart from the beginning.
         }
+        logInfo('download', `#${episode.id} paused (resume data ${resumeJson ? 'saved' : 'missing'})`);
         updateEpisode(episode.id, { status: 'paused', resumeJson });
       }
     })
@@ -222,6 +230,13 @@ function startStream(episode: Episode): Job {
   (async () => {
     const plan = await planStream(episode.sourceUrl, fetchText(headers, controller.signal), episode.maxHeight ?? MAX_STREAM_HEIGHT);
     // Pieces saved earlier must belong to this exact stream; if the site now serves something else, start over.
+    logInfo(
+      'stream',
+      `#${episode.id} plan ${plan.format} ${plan.height ?? '?'}p ${Math.round(plan.duration)}s ` +
+        plan.streams.map((s) => `${s.stream}:${s.segments.length}${s.init ? '+init' : ''}`).join(' ') +
+        ` ~${plan.estimatedBytes ? formatBytes(plan.estimatedBytes) : '?'}` +
+        (plan.streams.some((s) => s.segments.some((p) => p.key)) ? ' encrypted' : '')
+    );
     store.prepare(planFingerprint(plan));
     const free = freeSpace();
     const remaining = (plan.estimatedBytes ?? 0) - partsSize(plan, store);
@@ -231,6 +246,7 @@ function startStream(episode: Episode): Job {
     await downloadParts(plan, store, fetchBytes, headers, {
       concurrency: 4,
       signal: controller.signal,
+      onRetry: (part, attempt, err) => logWarn('stream', `#${episode.id} ${part} attempt ${attempt} failed:`, err),
       onProgress: ({ done, total, bytes }) =>
         onProgress(episode.id, { bytesWritten: bytes, totalBytes: -1, fraction: done / total, note: `${done} of ${total} pieces` }),
     });
@@ -244,6 +260,7 @@ function startStream(episode: Episode): Job {
     }
 
     videosDir.create({ idempotent: true, intermediates: true });
+    logInfo('stream', `#${episode.id} assembling ${formatBytes(partsSize(plan, store))} of pieces`);
     const sink = new FileSink(videoFile(episode));
     let duration: number;
     try {
@@ -265,13 +282,16 @@ function startStream(episode: Episode): Job {
     }
     sink.close();
     const size = videoFile(episode).size ?? 0;
+    logInfo('stream', `#${episode.id} done ${formatBytes(size)} ${Math.round(duration)}s`);
     updateEpisode(episode.id, { status: 'done', bytesWritten: size, totalBytes: size, durationSec: duration });
     deleteParts(episode.id);
     makeThumbnail(episode.id);
   })()
     .catch((err: unknown) => {
-      if (pausing) updateEpisode(episode.id, { status: 'paused' });
-      else failed(episode.id, err);
+      if (pausing) {
+        logInfo('stream', `#${episode.id} paused`);
+        updateEpisode(episode.id, { status: 'paused' });
+      } else failed(episode.id, err);
     })
     .finally(() => finished(episode.id));
 
@@ -379,6 +399,7 @@ export function retry(id: number) {
 }
 
 export function remove(id: number) {
+  logInfo('queue', `#${id} removed`);
   const task = active.get(id);
   if (task) {
     removing.add(id);
@@ -468,6 +489,7 @@ export function initDownloads() {
   for (const e of listEpisodes()) {
     if (e.status === 'downloading') updateEpisode(e.id, { status: 'queued' }, { silent: true });
     else if (e.status === 'done' && !videoFile(e).exists) {
+      logWarn('app', `#${e.id} video file missing; flagged for re-download`);
       updateEpisode(
         e.id,
         { status: 'error', error: 'The video file was deleted outside the app. Retry to download it again.', bytesWritten: 0, resumeJson: null },
@@ -475,7 +497,13 @@ export function initDownloads() {
       );
     }
   }
-  cleanUpFiles();
+  const freed = cleanUpFiles();
+  const all = listEpisodes();
+  logInfo(
+    'app',
+    `startup: ${all.filter((e) => e.status === 'done').length} videos, ${all.filter((e) => e.status !== 'done').length} in queue` +
+      (freed > 0 ? `, cleaned ${formatBytes(freed)}` : '')
+  );
   notify();
   pump();
 }

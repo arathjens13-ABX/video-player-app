@@ -1,13 +1,17 @@
+import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { Paths } from 'expo-file-system';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, Share, StyleSheet } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import { cleanUpFiles, temporaryFilesSize, videoFile } from '@/lib/downloads';
 import { formatBytes } from '@/lib/format';
 import { useEpisodes } from '@/lib/hooks';
+import { clearLog, getLogEntries } from '@/lib/log';
+import { BUILD, buildReport } from '@/lib/report';
 import { QUALITY_OPTIONS, setStreamQuality, useStreamQuality } from '@/lib/settings';
 
 export default function SettingsScreen() {
@@ -15,6 +19,14 @@ export default function SettingsScreen() {
   const episodes = useEpisodes();
   const quality = useStreamQuality();
   const [temp, setTemp] = useState(temporaryFilesSize);
+  const [logCount, setLogCount] = useState(() => getLogEntries().length);
+  // Refresh counts each time the tab is shown.
+  useFocusEffect(
+    useCallback(() => {
+      setLogCount(getLogEntries().length);
+      setTemp(temporaryFilesSize());
+    }, [])
+  );
 
   const { count, used } = useMemo(() => {
     let total = 0;
@@ -92,9 +104,49 @@ export default function SettingsScreen() {
         Applies to stream downloads you add from now on. MP4 files come in whatever quality the site offers.
       </Text>
 
+      <Text style={styles.heading}>Diagnostics</Text>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <Row label="Log entries" value={String(logCount)} last />
+      </View>
+      <View style={styles.actions}>
+        <Pressable
+          onPress={async () => {
+            await Clipboard.setStringAsync(buildReport());
+            Alert.alert('Report copied', 'Paste it into a message to send it.');
+          }}
+          hitSlop={8}>
+          <Text style={[styles.action, { color: colors.tint }]}>Copy report</Text>
+        </Pressable>
+        <Pressable onPress={() => Share.share({ message: buildReport() }).catch(() => {})} hitSlop={8}>
+          <Text style={[styles.action, { color: colors.tint }]}>Share report</Text>
+        </Pressable>
+        <Pressable
+          onPress={() =>
+            Alert.alert('Clear the log?', 'Start fresh before reproducing a problem.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Clear',
+                style: 'destructive',
+                onPress: () => {
+                  clearLog();
+                  setLogCount(0);
+                },
+              },
+            ])
+          }
+          hitSlop={8}>
+          <Text style={[styles.action, { color: colors.danger }]}>Clear</Text>
+        </Pressable>
+      </View>
+      <Text style={[styles.hint, { color: colors.muted }]}>
+        The report lists what the browser found, why links were rejected, and how each download went. It contains the
+        web addresses and episode names involved, plus your app version and iOS version.
+      </Text>
+
       <Text style={styles.heading}>About</Text>
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <Row label="Version" value={Constants.expoConfig?.version ?? '?'} last />
+        <Row label="Version" value={Constants.expoConfig?.version ?? '?'} />
+        <Row label="Build" value={BUILD.slice(0, 7)} last />
       </View>
     </ScrollView>
   );
@@ -123,5 +175,6 @@ const styles = StyleSheet.create({
   rowHint: { fontSize: 13, marginTop: 2 },
   check: { fontSize: 18, fontWeight: '700' },
   action: { fontSize: 16, fontWeight: '600', marginTop: 10 },
+  actions: { flexDirection: 'row', gap: 24 },
   hint: { fontSize: 13, marginTop: 8, lineHeight: 18 },
 });

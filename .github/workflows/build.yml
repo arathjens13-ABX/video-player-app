@@ -9,6 +9,10 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Shown in Settings → Diagnostics so a report can be matched to the code it came from.
+  EXPO_PUBLIC_BUILD: ${{ github.sha }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
