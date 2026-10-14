@@ -95,3 +95,26 @@ export function extractUrl(text: string): string | null {
   if (found) return normalizeUrl(found[0].replace(/[).,!?]+$/, ''));
   return normalizeUrl(text);
 }
+
+/** "https://www.example.com/x" -> "example.com", for showing where a link points. */
+export function hostOf(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    if (host) return host;
+  } catch {
+    // Fall through.
+  }
+  const scheme = url.match(/^([a-z][a-z0-9+.-]*):/i);
+  return scheme ? `${scheme[1]} link` : url;
+}
+
+/**
+ * A link for the log: host and path, with query values dropped ("?token=…&expires=…")
+ * so a shared report doesn't hand out working signed links.
+ */
+export function shortUrl(url: string, max = 120): string {
+  const [base, query] = url.replace(/^https?:\/\//, '').split('?', 2);
+  const keys = query ? query.split('&').map((kv) => kv.split('=')[0]).filter(Boolean) : [];
+  const out = keys.length ? `${base}?${keys.map((k) => `${k}=…`).join('&')}` : base;
+  return out.length > max ? out.slice(0, max) + '…' : out;
+}

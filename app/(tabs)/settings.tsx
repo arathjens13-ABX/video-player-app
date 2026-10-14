@@ -18,9 +18,9 @@ export default function SettingsScreen() {
   const colors = useColors();
   const episodes = useEpisodes();
   const quality = useStreamQuality();
-  const [temp, setTemp] = useState(temporaryFilesSize);
-  const [logCount, setLogCount] = useState(() => getLogEntries().length);
-  // Refresh counts each time the tab is shown.
+  const [temp, setTemp] = useState(0);
+  const [logCount, setLogCount] = useState(0);
+  // Filled in (and refreshed) each time the tab is shown.
   useFocusEffect(
     useCallback(() => {
       setLogCount(getLogEntries().length);
@@ -111,8 +111,12 @@ export default function SettingsScreen() {
       <View style={styles.actions}>
         <Pressable
           onPress={async () => {
-            await Clipboard.setStringAsync(buildReport());
-            Alert.alert('Report copied', 'Paste it into a message to send it.');
+            try {
+              await Clipboard.setStringAsync(buildReport());
+              Alert.alert('Report copied', 'Paste it into a message to send it.');
+            } catch (e) {
+              Alert.alert('Couldn’t copy the report', e instanceof Error ? e.message : String(e));
+            }
           }}
           hitSlop={8}>
           <Text style={[styles.action, { color: colors.tint }]}>Copy report</Text>
@@ -140,7 +144,8 @@ export default function SettingsScreen() {
       </View>
       <Text style={[styles.hint, { color: colors.muted }]}>
         The report lists what the browser found, why links were rejected, and how each download went. It contains the
-        web addresses and episode names involved, plus your app version and iOS version.
+        web addresses (without their access tokens) and episode names involved, plus the app and phone system
+        versions.
       </Text>
 
       <Text style={styles.heading}>About</Text>

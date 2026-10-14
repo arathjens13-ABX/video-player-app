@@ -10,6 +10,7 @@ import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import { addressToUrl, sameSite, shouldBlockNavigation } from '@/lib/browser';
 import { DETECTOR_JS, switchServerJs } from '@/lib/detector';
+import { hostOf } from '@/lib/links';
 import { candidateKey, type Candidate } from '@/lib/probe';
 import { relink } from '@/lib/downloads';
 import { logInfo, logWarn, shortUrl } from '@/lib/log';
@@ -17,7 +18,6 @@ import { onOpenInBrowser, type BrowserRequest } from '@/lib/open-in-browser';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
 import { loadRecent, rememberVisit, type RecentSite } from '@/lib/recent';
 import { USER_AGENT } from '@/lib/ua';
-import { URL } from '@/lib/url';
 
 const SUGGESTED: RecentSite[] = [{ url: 'https://animexin.dev/', title: 'AnimeXin' }];
 
@@ -55,6 +55,8 @@ export default function BrowserScreen() {
     userTyped.current = true;
     setCandidates([]);
     setServers([]);
+    candidateKeys.current.clear();
+    serverCount.current = -1;
     setBlocked(null);
     setEditing(false);
     setAddress(url);
@@ -95,13 +97,13 @@ export default function BrowserScreen() {
     }
     if (msg.type === 'media') {
       const candidate = { url: msg.url, kind: msg.kind, frame: msg.frame, via: msg.via };
-      if (!candidateKeys.current.has(candidateKey(msg.url))) {
-        candidateKeys.current.add(candidateKey(msg.url));
+      const key = candidateKey(msg.url);
+      if (!candidateKeys.current.has(key)) {
+        candidateKeys.current.add(key);
         logInfo('detect', `found ${msg.kind} via ${msg.via} in ${hostOf(msg.frame)}: ${shortUrl(msg.url)}`);
       }
       startProbe(candidate);
       // Same stream with a fresh token replaces the old entry rather than adding another.
-      const key = candidateKey(msg.url);
       setCandidates((list) => {
         const i = list.findIndex((c) => candidateKey(c.url) === key);
         if (i < 0) return [...list, candidate];
@@ -339,14 +341,6 @@ function isOk(status: ReturnType<typeof probeStatus>) {
 
 function samePage(a: string, b: string) {
   return a.split('#')[0] === b.split('#')[0];
-}
-
-function hostOf(url: string) {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url.split(':')[0] + ' link';
-  }
 }
 
 function ToolButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {

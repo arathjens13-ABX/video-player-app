@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { listEpisodes } from './db';
 import { formatBytes } from './format';
+import { hostOf } from './links';
 import { formatEntry, getLogEntries } from './log';
 
 /** Commit the app was built from (set by CI), to match a report to the code. */
@@ -28,13 +29,7 @@ export function buildReport(): string {
   for (const e of episodes) byStatus.set(e.status, (byStatus.get(e.status) ?? 0) + 1);
   lines.push('', `Downloads: ${[...byStatus].map(([s, n]) => `${n} ${s}`).join(', ') || 'none'}`);
   for (const e of episodes.filter((x) => x.status !== 'done')) {
-    let host = '?';
-    try {
-      host = e.sourceUrl.split('/')[2] ?? '?';
-    } catch {
-      // Keep '?'.
-    }
-    lines.push(`- #${e.id} ${e.status} ${e.kind} ${host} "${e.show} · ${e.title}"${e.error ? ` — ${e.error}` : ''}`);
+    lines.push(`- #${e.id} ${e.status} ${e.kind} ${hostOf(e.sourceUrl)} "${e.show} · ${e.title}"${e.error ? ` — ${e.error}` : ''}`);
   }
 
   const entries = getLogEntries();

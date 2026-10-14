@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { extractUrl, guessNames, normalizeUrl } from '../lib/links';
+import { extractUrl, guessNames, hostOf, normalizeUrl, shortUrl } from '../lib/links';
 
 test('guessNames reads show and episode from animexin-style URLs', () => {
   assert.deepEqual(
@@ -51,4 +51,21 @@ test('extractUrl pulls the link out of shared text', () => {
   assert.equal(extractUrl('(https://a.b/c.mp4).'), 'https://a.b/c.mp4');
   assert.equal(extractUrl('animexin.dev'), 'https://animexin.dev/');
   assert.equal(extractUrl('no link here'), null);
+});
+
+test('hostOf', () => {
+  assert.equal(hostOf('https://www.animexin.dev/x'), 'animexin.dev');
+  assert.equal(hostOf('https://vd205.okcdn.ru/video.m3u8?x=1'), 'vd205.okcdn.ru');
+  assert.equal(hostOf('itms-apps://apps.apple.com/app/id1'), 'apps.apple.com');
+  assert.equal(hostOf('not a url'), 'not a url');
+});
+
+test('shortUrl drops query values so reports never contain working tokens', () => {
+  assert.equal(
+    shortUrl('https://cdndirector.dailymotion.com/cdn/manifest/video/xb6d29a.m3u8?sec=SECRET&expires=1791&cmd=x'),
+    'cdndirector.dailymotion.com/cdn/manifest/video/xb6d29a.m3u8?sec=…&expires=…&cmd=…'
+  );
+  assert.equal(shortUrl('https://a.b/c.mp4'), 'a.b/c.mp4');
+  assert.ok(!shortUrl('https://x.y/v.m3u8?token=abc123').includes('abc123'));
+  assert.equal(shortUrl('https://a.b/' + 'x'.repeat(200), 20).length, 21);
 });

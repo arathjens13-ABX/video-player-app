@@ -178,10 +178,17 @@ export async function downloadParts(
   const queue = parts.filter((p) => !store.has(p.name));
   opts.onProgress?.({ done, total: parts.length, bytes });
 
+  // One part failing for good stops the others too (and cancels their requests).
+  const stop = new AbortController();
+  const onOuterAbort = () => stop.abort();
+  opts.signal?.addEventListener('abort', onOuterAbort);
+  if (opts.signal?.aborted) stop.abort();
+  const signal = stop.signal;
+
   const getKey = (url: string) => {
     let k = keys.get(url);
     if (!k) {
-      k = fetchBytes(url, headers, opts.signal);
+      k = fetchBytes(url, headers, signal);
       keys.set(url, k);
       k.catch(() => keys.delete(url));
     }
@@ -192,7 +199,7 @@ export async function downloadParts(
     const h = part.range
       ? { ...headers, Range: `bytes=${part.range.offset}-${part.range.offset + part.range.length - 1}` }
       : headers;
-    let data = await fetchBytes(part.url, h, opts.signal);
+    let data = await fetchBytes(part.url, h, signal);
     if (part.key?.method === 'AES-128' && part.key.url) {
       const key = await getKey(part.key.url);
       if (key.length !== 16) throw new Error('The stream’s decryption key is invalid');
@@ -206,33 +213,45 @@ export async function downloadParts(
     return data;
   }
 
+  const ATTEMPTS = 4;
   async function worker() {
     while (queue.length > 0) {
-      if (opts.signal?.aborted) throw abortError();
+      if (signal.aborted) throw abortError();
       const part = queue.shift()!;
-      let lastError: unknown;
-      for (let attempt = 0; attempt < 4; attempt++) {
+      for (let attempt = 1; ; attempt++) {
         try {
           const data = await fetchPart(part);
+          if (signal.aborted) throw abortError(); // don't write once the download has been stopped
           store.write(part.name, data);
           bytes += data.length;
           done++;
           opts.onProgress?.({ done, total: parts.length, bytes });
-          lastError = undefined;
           break;
         } catch (e) {
-          lastError = e;
-          if (opts.signal?.aborted) throw e;
-          opts.onRetry?.(part.name, attempt + 1, e);
-          await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+          if (signal.aborted || attempt >= ATTEMPTS) throw e;
+          opts.onRetry?.(part.name, attempt, e);
+          await new Promise((r) => setTimeout(r, 500 * 2 ** (attempt - 1)));
         }
       }
-      if (lastError) throw lastError;
     }
   }
 
   const n = Math.max(1, Math.min(opts.concurrency ?? 4, queue.length));
-  await Promise.all(Array.from({ length: n }, worker));
+  // Wait for every worker to stop before reporting, so nothing writes to the store afterwards.
+  const results = await Promise.allSettled(
+    Array.from({ length: n }, () =>
+      worker().catch((e) => {
+        stop.abort();
+        throw e;
+      })
+    )
+  );
+  opts.signal?.removeEventListener('abort', onOuterAbort);
+  // Report the error that started it, not the cancellations it caused.
+  const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => r.reason as unknown);
+  const real = errors.find((e) => !(e instanceof Error && e.name === 'AbortError'));
+  if (real !== undefined) throw real;
+  if (errors.length > 0) throw errors[0];
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));

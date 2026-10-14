@@ -33,10 +33,8 @@ export function videoFile(episode: Pick<Episode, 'fileName'>) {
   return new File(videosDir, episode.fileName);
 }
 
-const active = new Map<number, Job>();
+const active = new Map<number, Job>(); // the current job per episode
 const lastDbWrite = new Map<number, number>();
-// Ids being removed, so their cancellation isn't recorded as an error.
-const removing = new Set<number>();
 
 export type NewDownload = {
   url: string;
@@ -83,12 +81,7 @@ export function enqueue(d: NewDownload) {
  * stopped working) and queues it again, keeping its name and place.
  */
 export function relink(id: number, d: { url: string; kind: DownloadKind; referer?: string | null }) {
-  const job = active.get(id);
-  if (job) {
-    removing.add(id); // its cancellation isn't an error
-    job.cancel();
-    setTimeout(() => removing.delete(id), 5000);
-  }
+  const old = detach(id);
   progress.delete(id);
   logInfo('queue', `#${id} relinked to ${d.kind} ${shortUrl(d.url)}`);
   updateEpisode(id, {
@@ -100,8 +93,8 @@ export function relink(id: number, d: { url: string; kind: DownloadKind; referer
     resumeJson: null,
     bytesWritten: 0,
   });
-  // Let a cancelled job wind down before the new one starts.
-  setTimeout(pump, job ? 300 : 0);
+  // A replaced stream job must stop writing to the parts folder before the new one starts.
+  (old?.done ?? Promise.resolve()).then(pump, pump);
 }
 
 function pump() {
@@ -115,26 +108,51 @@ function pump() {
   }
 }
 
-/** A running download, whichever kind. */
-type Job = { pause(): void; cancel(): void };
+/**
+ * A running download, whichever kind. A job only touches its episode while it
+ * is the episode's current job: once removed or replaced it winds down quietly.
+ */
+type Job = {
+  pause(): void;
+  cancel(): void;
+  /** Settles when the job has completely stopped. */
+  done: Promise<void>;
+  isCurrent(): boolean;
+};
 
 function start(episode: Episode) {
   logInfo('download', `#${episode.id} start ${episode.kind}${episode.maxHeight ? ` ≤${episode.maxHeight}p` : ''} ${shortUrl(episode.sourceUrl)}`);
   updateEpisode(episode.id, { status: 'downloading', error: null });
-  const job = episode.kind === 'hls' ? startStream(episode) : startFile(episode);
+  const job: Job = { pause() {}, cancel() {}, done: Promise.resolve(), isCurrent: () => active.get(episode.id) === job };
   active.set(episode.id, job);
+  job.done = (episode.kind === 'hls' ? runStream(episode, job) : runFile(episode, job))
+    .catch((err: unknown) => failed(job, episode.id, err))
+    .finally(() => finishJob(episode.id, job));
   updateKeepAwake();
 }
 
-function finished(id: number) {
+/** Stops tracking an episode's job (cancelling it) so it can be removed or replaced. */
+function detach(id: number): Job | undefined {
+  const job = active.get(id);
+  if (!job) return undefined;
   active.delete(id);
+  job.cancel();
   lastDbWrite.delete(id);
   updateKeepAwake();
+  return job;
+}
+
+function finishJob(id: number, job: Job) {
+  if (job.isCurrent()) {
+    active.delete(id);
+    lastDbWrite.delete(id);
+    updateKeepAwake();
+  }
   pump();
 }
 
-function failed(id: number, err: unknown, patch: Partial<Episode> = {}) {
-  if (removing.has(id)) return;
+function failed(job: Job, id: number, err: unknown, patch: Partial<Episode> = {}) {
+  if (!job.isCurrent()) return;
   logError('download', `#${id} failed:`, err);
   updateEpisode(id, { status: 'error', error: explainError(err), ...patch });
 }
@@ -151,12 +169,13 @@ export function explainError(err: unknown): string {
   return message;
 }
 
-function startFile(episode: Episode): Job {
+async function runFile(episode: Episode, job: Job): Promise<void> {
   videosDir.create({ idempotent: true, intermediates: true });
   const options = {
     headers: JSON.parse(episode.headersJson) as Record<string, string>,
-    onProgress: ({ bytesWritten, totalBytes }: { bytesWritten: number; totalBytes: number }) =>
-      onProgress(episode.id, { bytesWritten, totalBytes }),
+    onProgress: ({ bytesWritten, totalBytes }: { bytesWritten: number; totalBytes: number }) => {
+      if (job.isCurrent()) onProgress(episode.id, { bytesWritten, totalBytes });
+    },
   };
 
   let task: DownloadTask;
@@ -170,18 +189,22 @@ function startFile(episode: Episode): Job {
     task = File.createDownloadTask(episode.sourceUrl, destination, options);
     run = () => task.downloadAsync();
   }
+  job.pause = () => task.pause();
+  job.cancel = () => task.cancel();
 
-  run()
+  return run()
     .then((file) => {
+      if (!job.isCurrent()) return;
       if (file) {
         const check = checkDownloadedFile(file);
         if (!check.ok) {
+          const size = file.size ?? 0;
           try {
             file.delete();
           } catch {
             // Leaving the bad file is harmless; it is overwritten on retry.
           }
-          logError('download', `#${episode.id} finished file is not a video (${file.size ?? 0} bytes): ${check.reason}`);
+          logError('download', `#${episode.id} finished file is not a video (${size} bytes): ${check.reason}`);
           updateEpisode(episode.id, { status: 'error', error: check.reason, resumeJson: null, bytesWritten: 0 });
           return;
         }
@@ -207,13 +230,8 @@ function startFile(episode: Episode): Job {
       }
     })
     // A failed resume usually means stale resume data; drop it so a retry starts fresh.
-    .catch((err: unknown) => failed(episode.id, err, { resumeJson: null }))
-    .finally(() => {
-      task.release();
-      finished(episode.id);
-    });
-
-  return { pause: () => task.pause(), cancel: () => task.cancel() };
+    .catch((err: unknown) => failed(job, episode.id, err, { resumeJson: null }))
+    .finally(() => task.release());
 }
 
 /**
@@ -221,15 +239,22 @@ function startFile(episode: Episode): Job {
  * one MP4. Pieces already on disk are kept, so pausing (or the app being
  * closed) loses at most the pieces in flight.
  */
-function startStream(episode: Episode): Job {
+function runStream(episode: Episode, job: Job): Promise<void> {
   const controller = new AbortController();
   let pausing = false;
+  job.pause = () => {
+    pausing = true;
+    controller.abort();
+  };
+  job.cancel = () => controller.abort();
   const headers = JSON.parse(episode.headersJson) as Record<string, string>;
   const store = new FilePartStore(partsDir(episode.id));
+  const report = (p: Progress) => {
+    if (job.isCurrent()) onProgress(episode.id, p);
+  };
 
-  (async () => {
+  return (async () => {
     const plan = await planStream(episode.sourceUrl, fetchText(headers, controller.signal), episode.maxHeight ?? MAX_STREAM_HEIGHT);
-    // Pieces saved earlier must belong to this exact stream; if the site now serves something else, start over.
     logInfo(
       'stream',
       `#${episode.id} plan ${plan.format} ${plan.height ?? '?'}p ${Math.round(plan.duration)}s ` +
@@ -237,6 +262,7 @@ function startStream(episode: Episode): Job {
         ` ~${plan.estimatedBytes ? formatBytes(plan.estimatedBytes) : '?'}` +
         (plan.streams.some((s) => s.segments.some((p) => p.key)) ? ' encrypted' : '')
     );
+    // Pieces saved earlier must belong to this exact stream; if the site now serves something else, start over.
     store.prepare(planFingerprint(plan));
     const free = freeSpace();
     const remaining = (plan.estimatedBytes ?? 0) - partsSize(plan, store);
@@ -246,29 +272,29 @@ function startStream(episode: Episode): Job {
     await downloadParts(plan, store, fetchBytes, headers, {
       concurrency: 4,
       signal: controller.signal,
-      onRetry: (part, attempt, err) => logWarn('stream', `#${episode.id} ${part} attempt ${attempt} failed:`, err),
+      onRetry: (part, attempt, err) => logWarn('stream', `#${episode.id} ${part} attempt ${attempt} failed, retrying:`, err),
       onProgress: ({ done, total, bytes }) =>
-        onProgress(episode.id, { bytesWritten: bytes, totalBytes: -1, fraction: done / total, note: `${done} of ${total} pieces` }),
+        report({ bytesWritten: bytes, totalBytes: -1, fraction: done / total, note: `${done} of ${total} pieces` }),
     });
     if (controller.signal.aborted) return;
 
     // Parts are deleted as they go into the MP4, so finishing only needs a little headroom.
-    const headroom = partsSize(plan, store) * 0.15 + 50e6;
+    const pieces = partsSize(plan, store);
+    const headroom = pieces * 0.15 + 50e6;
     const freeNow = freeSpace();
     if (freeNow !== null && freeNow < headroom) {
       throw new Error(`Not enough free space to finish: free up about ${formatBytes(headroom - freeNow)}`);
     }
 
     videosDir.create({ idempotent: true, intermediates: true });
-    logInfo('stream', `#${episode.id} assembling ${formatBytes(partsSize(plan, store))} of pieces`);
+    logInfo('stream', `#${episode.id} assembling ${formatBytes(pieces)} of pieces`);
     const sink = new FileSink(videoFile(episode));
     let duration: number;
     try {
       duration = await assemble(plan, store, sink, {
         signal: controller.signal,
         consumeParts: true,
-        onProgress: (f) =>
-          onProgress(episode.id, { bytesWritten: sink.position, totalBytes: -1, fraction: f, note: 'Finishing…' }),
+        onProgress: (f) => report({ bytesWritten: sink.position, totalBytes: -1, fraction: f, note: 'Finishing…' }),
       });
     } catch (e) {
       sink.close();
@@ -281,27 +307,18 @@ function startStream(episode: Episode): Job {
       throw e;
     }
     sink.close();
+    if (!job.isCurrent()) return;
     const size = videoFile(episode).size ?? 0;
     logInfo('stream', `#${episode.id} done ${formatBytes(size)} ${Math.round(duration)}s`);
     updateEpisode(episode.id, { status: 'done', bytesWritten: size, totalBytes: size, durationSec: duration });
     deleteParts(episode.id);
     makeThumbnail(episode.id);
-  })()
-    .catch((err: unknown) => {
-      if (pausing) {
-        logInfo('stream', `#${episode.id} paused`);
-        updateEpisode(episode.id, { status: 'paused' });
-      } else failed(episode.id, err);
-    })
-    .finally(() => finished(episode.id));
-
-  return {
-    pause: () => {
-      pausing = true;
-      controller.abort();
-    },
-    cancel: () => controller.abort(),
-  };
+  })().catch((err: unknown) => {
+    if (pausing && job.isCurrent()) {
+      logInfo('stream', `#${episode.id} paused`);
+      updateEpisode(episode.id, { status: 'paused' });
+    } else failed(job, episode.id, err);
+  });
 }
 
 function makeThumbnail(id: number) {
@@ -400,11 +417,7 @@ export function retry(id: number) {
 
 export function remove(id: number) {
   logInfo('queue', `#${id} removed`);
-  const task = active.get(id);
-  if (task) {
-    removing.add(id);
-    task.cancel();
-  }
+  detach(id);
   const episode = getEpisode(id);
   if (episode) {
     const file = videoFile(episode);
@@ -418,7 +431,6 @@ export function remove(id: number) {
   deleteThumbnail(id);
   progress.delete(id);
   deleteEpisodeRow(id);
-  setTimeout(() => removing.delete(id), 5000);
 }
 
 /**
@@ -434,7 +446,7 @@ export function cleanUpFiles(): number {
       for (const entry of partsRoot.list()) {
         if (!/^\d+$/.test(entry.name)) continue;
         const e = episodes.get(Number(entry.name));
-        const inUse = e && e.status !== 'done' && !removing.has(e.id);
+        const inUse = e && e.status !== 'done';
         if (!inUse) {
           freed += entry.size ?? 0;
           entry.delete();
@@ -498,10 +510,11 @@ export function initDownloads() {
     }
   }
   const freed = cleanUpFiles();
-  const all = listEpisodes();
+  const counts = new Map<string, number>();
+  for (const e of listEpisodes()) counts.set(e.status, (counts.get(e.status) ?? 0) + 1);
   logInfo(
     'app',
-    `startup: ${all.filter((e) => e.status === 'done').length} videos, ${all.filter((e) => e.status !== 'done').length} in queue` +
+    `startup: ${[...counts].map(([status, n]) => `${n} ${status}`).join(', ') || 'no downloads'}` +
       (freed > 0 ? `, cleaned ${formatBytes(freed)}` : '')
   );
   notify();

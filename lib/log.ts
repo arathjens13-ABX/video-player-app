@@ -5,18 +5,27 @@
  * Kept in memory as a ring buffer and written to a file shortly after each
  * entry (immediately for errors, which may be followed by a crash).
  */
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 
 export type LogLevel = 'info' | 'warn' | 'error';
 export type LogEntry = { t: number; level: LogLevel; area: string; msg: string };
 
 const MAX_ENTRIES = 600;
 const MAX_MESSAGE = 600;
+const MAX_ERROR_MESSAGE = 4000; // errors keep their stack traces
 const FLUSH_DELAY_MS = 2000;
 
-const logFile = new File(Paths.document, 'diagnostics.json');
-let entries: LogEntry[] = load();
+// A hidden folder: Documents is visible in the Files app, and the log isn't for browsing.
+const logDir = new Directory(Paths.document, '.diagnostics');
+const logFile = new File(logDir, 'log.json');
+let loaded: LogEntry[] | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Read from disk on first use rather than at import, so app startup doesn't wait on it. */
+function entries(): LogEntry[] {
+  if (!loaded) loaded = load();
+  return loaded;
+}
 
 function load(): LogEntry[] {
   try {
@@ -31,8 +40,9 @@ function load(): LogEntry[] {
 function flush() {
   flushTimer = null;
   try {
+    logDir.create({ idempotent: true, intermediates: true });
     if (!logFile.exists) logFile.create();
-    logFile.write(JSON.stringify(entries));
+    logFile.write(JSON.stringify(entries()));
   } catch {
     // Diagnostics must never break the app.
   }
@@ -50,9 +60,11 @@ function describe(value: unknown): string {
 
 export function log(level: LogLevel, area: string, ...parts: unknown[]) {
   let msg = parts.map(describe).join(' ');
-  if (msg.length > MAX_MESSAGE) msg = msg.slice(0, MAX_MESSAGE) + '…';
-  entries.push({ t: Date.now(), level, area, msg });
-  if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
+  const max = level === 'error' ? MAX_ERROR_MESSAGE : MAX_MESSAGE;
+  if (msg.length > max) msg = msg.slice(0, max) + '…';
+  const list = entries();
+  list.push({ t: Date.now(), level, area, msg });
+  if (list.length > MAX_ENTRIES) list.shift();
   if (level === 'error') {
     if (flushTimer) clearTimeout(flushTimer);
     flush();
@@ -66,19 +78,15 @@ export const logWarn = (area: string, ...parts: unknown[]) => log('warn', area, 
 export const logError = (area: string, ...parts: unknown[]) => log('error', area, ...parts);
 
 export function getLogEntries(): readonly LogEntry[] {
-  return entries;
+  return entries();
 }
 
 export function clearLog() {
-  entries = [];
+  loaded = [];
   flush();
 }
 
-/** Short host + path for logs: enough to tell links apart without pages of tokens. */
-export function shortUrl(url: string, max = 120): string {
-  const noScheme = url.replace(/^https?:\/\//, '');
-  return noScheme.length > max ? noScheme.slice(0, max) + '…' : noScheme;
-}
+export { shortUrl } from './links';
 
 function pad(n: number) {
   return String(n).padStart(2, '0');

@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 
 import { formatBytes, formatDuration } from '@/lib/format';
+import { hostOf } from '@/lib/links';
 import type { Candidate, ProbeResult } from '@/lib/probe';
 import { probeStatus, subscribeProbes } from '@/lib/probe-store';
 
 import { Text, View } from './Themed';
 import { useColors } from './useColors';
-import { URL } from '@/lib/url';
 
 export type Server = { label: string; url: string };
 
@@ -130,14 +130,6 @@ function CandidateRow({ candidate, showHidden, onDownload }: { candidate: Candid
       ) : null}
     </View>
   );
-}
-
-function hostOf(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
 }
 
 const styles = StyleSheet.create({

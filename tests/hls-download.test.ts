@@ -212,3 +212,38 @@ test('plan fingerprints ignore signed query strings but not quality or layout', 
   const ts = await planStream(BASE + 'ts-aes/index.m3u8', io.fetchText);
   assert.notEqual(planFingerprint(a), planFingerprint(ts));
 });
+
+test('a piece that keeps failing stops the whole download cleanly', async () => {
+  const slow = fixtureFetch({ fail: (u) => u.endsWith('video/seg1.m4s') });
+  const delayed: FetchBytes = async (u, h, signal) => {
+    await new Promise((r) => setTimeout(r, 40));
+    if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    return slow.fetchBytes(u, h, signal);
+  };
+  const plan = await planStream(BASE + 'fmp4-split/master.m3u8', slow.fetchText);
+  const base = new DirStore(tempDir());
+  let writesAfterFailure = 0;
+  let failedAt = 0;
+  const store = {
+    has: (n: string) => base.has(n),
+    read: (n: string) => base.read(n),
+    remove: (n: string) => base.remove(n),
+    size: (n: string) => base.size(n),
+    write: (n: string, b: Uint8Array) => {
+      if (failedAt) writesAfterFailure++;
+      base.write(n, b);
+    },
+  };
+  const retries: string[] = [];
+  await assert.rejects(
+    downloadParts(plan, store, delayed, {}, { concurrency: 3, onRetry: (part, attempt) => retries.push(`${part}#${attempt}`) }),
+    (e: Error) => e.message === 'network down' // the real cause, not the cancellations it triggered
+  );
+  failedAt = Date.now();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(writesAfterFailure, 0, 'no worker may write after the download has failed');
+  assert.deepEqual(
+    retries.filter((r) => r.startsWith('video-1#')),
+    ['video-1#1', 'video-1#2', 'video-1#3'] // 4 attempts = 3 retries, no "retry" after the last one
+  );
+});
