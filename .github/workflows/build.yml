@@ -31,6 +31,9 @@ jobs:
 
   android:
     needs: check
+    # App builds use most of the Actions allowance (macOS minutes count 10x on
+    # private repos), so they run only for main and manual runs.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +60,9 @@ jobs:
 
   ios:
     needs: check
+    # App builds use most of the Actions allowance (macOS minutes count 10x on
+    # private repos), so they run only for main and manual runs.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
