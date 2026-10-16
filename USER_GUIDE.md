@@ -60,6 +60,8 @@ SideStore is ready. You won't need the PC again unless something goes badly wron
 5. Open **SideStore → My Apps → +** (top left), then pick **VidStash.ipa** from Downloads.
 6. Wait for it to install. **VidStash** appears on your home screen.
 
+> **If "Latest build" is out of date** (for example, GitHub's free build minutes ran out for the month): open the repo's **Actions** tab, tap the newest green **Build apps** run on `main`, scroll down to **Artifacts** and tap **VidStash-ios**. That downloads a zip. In the Files app, tap the zip to unzip it, then install the `VidStash.ipa` inside it with SideStore (steps 4–6 above).
+
 ---
 
 ## Part 3: Download your first episode
