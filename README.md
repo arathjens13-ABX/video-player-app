@@ -41,7 +41,7 @@ Every push to `main` builds both apps on GitHub Actions and publishes them to th
 - `VidStash.ipa`: iPhone (unsigned; SideStore signs it with your Apple ID)
 - `VidStash.apk`: Android (install directly)
 
-The repo is private, so open the Releases page in Safari while signed in to GitHub to download.
+Open the Releases page in Safari on the phone to download; no GitHub account is needed.
 
 ### iPhone install (free, with SideStore)
 

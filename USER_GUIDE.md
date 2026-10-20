@@ -53,14 +53,14 @@ SideStore is ready. You won't need the PC again unless something goes badly wron
 
 ## Part 2: Install VidStash
 
-1. On your iPhone, open **Safari** and sign in to **GitHub** (the repo is private, so you must be signed in).
+1. On your iPhone, open **Safari**. (No GitHub account needed: the repo is public.)
 2. Go to your repo's **Releases** page: `github.com/arathjens13-ABX/video-player-app/releases`
 3. Under **Latest build**, tap **VidStash.ipa** to download it. It saves to the Files app (Downloads).
 4. Make sure **LocalDevVPN is connected** and you're on **Wi-Fi**.
 5. Open **SideStore → My Apps → +** (top left), then pick **VidStash.ipa** from Downloads.
 6. Wait for it to install. **VidStash** appears on your home screen.
 
-> **If "Latest build" is out of date** (for example, GitHub's free build minutes ran out for the month): open the repo's **Actions** tab, tap the newest green **Build apps** run on `main`, scroll down to **Artifacts** and tap **VidStash-ios**. That downloads a zip. In the Files app, tap the zip to unzip it, then install the `VidStash.ipa` inside it with SideStore (steps 4–6 above).
+> **If "Latest build" is out of date** (the newest build failed to publish): sign in to GitHub in Safari, then open the repo's **Actions** tab, tap the newest green **Build apps** run on `main`, scroll down to **Artifacts** and tap **VidStash-ios**. That downloads a zip. In the Files app, tap the zip to unzip it, then install the `VidStash.ipa` inside it with SideStore (steps 4–6 above).
 
 ---
 
