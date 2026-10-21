@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet } from 'rea
 
 import { formatBytes, formatDuration } from '@/lib/format';
 import type { Server } from '@/lib/detector-messages';
+import { estimatedSize, groupVideos, sourceLabel, type VideoGroup } from '@/lib/candidates';
 import { hostOf } from '@/lib/links';
 import type { Candidate, ProbeResult } from '@/lib/probe';
 import { probeStatus, subscribeProbes } from '@/lib/probe-store';
@@ -34,7 +35,14 @@ export function DetectedSheet({
   onSwitchServer: (s: Server) => void;
 }) {
   const colors = useColors();
-  const [showHidden, setShowHidden] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [, rerender] = useState(0);
+  useEffect(() => subscribeProbes(() => rerender((n) => n + 1)), []);
+  const groups = groupVideos(candidates, probeStatus);
+  const pending = candidates.filter((c) => {
+    const status = probeStatus(c.url);
+    return status === undefined || status === 'pending';
+  }).length;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -46,23 +54,36 @@ export function DetectedSheet({
       </View>
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={[styles.section, { color: colors.muted }]}>Videos</Text>
-        {candidates.length === 0 ? (
+        {groups.map((g, i) => (
+          <VideoCard
+            key={g.best.url}
+            group={g}
+            recommended={i === 0 && groups.length > 1}
+            onDownload={() => onDownload(g.best)}
+          />
+        ))}
+        {pending > 0 ? (
+          <View style={styles.checking} lightColor="transparent" darkColor="transparent">
+            <ActivityIndicator size="small" />
+            <Text style={[styles.hint, { color: colors.muted, marginBottom: 0 }]}>
+              Checking {pending} link{pending === 1 ? '' : 's'}…
+            </Text>
+          </View>
+        ) : null}
+        {candidates.length === 0 || (groups.length === 0 && pending === 0) ? (
           <Text style={[styles.empty, { color: colors.muted }]}>
-            Nothing yet. Press play on the video (ads may play first). If it still doesn’t show up, try another server
-            below.
+            {candidates.length === 0 ? 'Nothing yet. ' : 'Nothing that checks out yet. '}
+            Press play on the video (ads may play first). If it still doesn’t show up, try another server below.
           </Text>
-        ) : (
-          candidates.map((c) => (
-            <CandidateRow key={c.url} candidate={c} showHidden={showHidden} onDownload={() => onDownload(c)} />
-          ))
-        )}
+        ) : null}
         {candidates.length > 0 ? (
-          <Pressable onPress={() => setShowHidden((v) => !v)} hitSlop={8}>
+          <Pressable onPress={() => setShowAll((v) => !v)} hitSlop={8}>
             <Text style={[styles.toggle, { color: colors.muted }]}>
-              {showHidden ? 'Hide links that didn’t check out' : 'Show links that didn’t check out'}
+              {showAll ? 'Hide all links' : `Show all ${candidates.length} links (copies and ones that didn’t check out)`}
             </Text>
           </Pressable>
         ) : null}
+        {showAll ? candidates.map((c) => <CandidateRow key={c.url} candidate={c} onDownload={() => onDownload(c)} />) : null}
 
         {servers.length > 0 ? (
           <>
@@ -90,11 +111,45 @@ export function DetectedSheet({
   );
 }
 
-function CandidateRow({ candidate, showHidden, onDownload }: { candidate: Candidate; showHidden: boolean; onDownload: () => void }) {
+/** One video found on the page: what it is (length, quality, size) and where it plays from. */
+function VideoCard({ group, recommended, onDownload }: { group: VideoGroup; recommended: boolean; onDownload: () => void }) {
+  const colors = useColors();
+  const r = group.result;
+  const quality = r.kind === 'hls' ? r.info.qualities[0]?.label : null;
+  const size = estimatedSize(r);
+  const title =
+    r.kind === 'hls'
+      ? [formatDuration(r.info.duration), quality ? `up to ${quality}` : null].filter(Boolean).join(' · ')
+      : `Video file${r.size ? ` · ${formatBytes(r.size)}` : ''}`;
+  const meta = [
+    sourceLabel(group.best),
+    r.kind === 'hls' && size ? `about ${formatBytes(size)}` : null,
+    r.kind === 'hls' && r.info.qualities.length > 1 ? `${r.info.qualities.length} qualities` : null,
+    r.kind === 'hls' && r.info.encrypted ? 'encrypted' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <View style={[styles.row, { backgroundColor: colors.card }]}>
+      {recommended ? <Text style={[styles.recommended, { color: colors.tint }]}>Best match</Text> : null}
+      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={[styles.rowMeta, { color: colors.muted }]} numberOfLines={2}>
+        {meta}
+      </Text>
+      <Pressable
+        onPress={onDownload}
+        style={({ pressed }) => [styles.download, { backgroundColor: colors.tint, opacity: pressed ? 0.7 : 1 }]}>
+        <Text style={styles.downloadText}>Download</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function CandidateRow({ candidate, onDownload }: { candidate: Candidate; onDownload: () => void }) {
   const colors = useColors();
   const result = useProbe(candidate);
   const invalid = result?.status === 'invalid';
-  if (invalid && !showHidden) return null;
 
   let detail = 'Checking…';
   if (result?.status === 'invalid') detail = result.reason;
@@ -143,6 +198,9 @@ const styles = StyleSheet.create({
   row: { borderRadius: 10, padding: 12, marginBottom: 8 },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowTitle: { fontSize: 16, fontWeight: '500', flexShrink: 1 },
+  cardTitle: { fontSize: 18, fontWeight: '600' },
+  recommended: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
+  checking: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   rowMeta: { fontSize: 13, marginTop: 4 },
   badge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },

@@ -2,6 +2,7 @@
 import { Directory, File, FileMode, Paths, type FileHandle } from 'expo-file-system';
 
 import type { FetchBytes, PartStore } from './hls-download';
+import { deadline, TimeoutError, untilAborted } from './http';
 import type { OutputSink } from './mp4/flatten';
 
 /**
@@ -84,22 +85,42 @@ export class FileSink implements OutputSink {
   }
 }
 
+/** A piece that sends nothing for this long is retried rather than waited on forever. */
+const PIECE_TIMEOUT_MS = 60_000;
+
 export const fetchBytes: FetchBytes = async (url, headers, signal) => {
-  const res = await fetch(url, { headers, signal });
-  if (!res.ok) throw new Error(`The server answered ${res.status}`);
-  // A host that ignores Range would send the whole file for every piece.
-  if (headers.Range && res.status !== 206) {
-    res.body?.cancel?.().catch(() => {});
-    throw new Error('The server doesn’t support partial downloads, which this stream needs');
+  const limit = deadline(PIECE_TIMEOUT_MS, signal);
+  try {
+    return await untilAborted(
+      (async () => {
+        const res = await fetch(url, { headers, signal: limit.signal });
+        if (!res.ok) throw new Error(`The server answered ${res.status}`);
+        // A host that ignores Range would send the whole file for every piece.
+        if (headers.Range && res.status !== 206) {
+          res.body?.cancel?.().catch(() => {});
+          throw new Error('The server doesn’t support partial downloads, which this stream needs');
+        }
+        return new Uint8Array(await res.arrayBuffer());
+      })(),
+      limit.signal
+    );
+  } catch (e) {
+    throw limit.timedOut() ? new TimeoutError() : e;
+  } finally {
+    limit.done();
   }
-  return new Uint8Array(await res.arrayBuffer());
 };
 
 /** Fetches a playlist, reporting the final URL after redirects (relative links resolve against it). */
 export function fetchText(headers: Record<string, string>, signal?: AbortSignal) {
   return async (url: string) => {
-    const res = await fetch(url, { headers, signal });
-    if (!res.ok) throw new Error(`The server answered ${res.status}`);
-    return { text: await res.text(), url: res.url || url };
+    return untilAborted(
+      (async () => {
+        const res = await fetch(url, { headers, signal });
+        if (!res.ok) throw new Error(`The server answered ${res.status}`);
+        return { text: await res.text(), url: res.url || url };
+      })(),
+      signal
+    );
   };
 }

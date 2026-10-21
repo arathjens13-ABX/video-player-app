@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput } 
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import type { Episode } from '@/lib/db';
-import { pause, remove, resume, retry } from '@/lib/downloads';
+import { FINISHING, pause, remove, resume, retry } from '@/lib/downloads';
 import { formatBytes } from '@/lib/format';
 import { useEpisodes, useProgress } from '@/lib/hooks';
 import { extractUrl } from '@/lib/links';
@@ -112,7 +112,8 @@ function DownloadRow({ episode }: { episode: Episode }) {
         <View style={[styles.progressFill, { width: `${fraction * 100}%`, backgroundColor: colors.tint }]} />
       </View>
       <View style={styles.rowButtons} lightColor="transparent" darkColor="transparent">
-        {episode.status === 'downloading' ? <Button title="Pause" onPress={() => pause(episode.id)} /> : null}
+        {/* A stream being put together can't pause; it only takes a moment. */}
+        {episode.status === 'downloading' && note !== FINISHING ? <Button title="Pause" onPress={() => pause(episode.id)} /> : null}
         {episode.status === 'paused' ? <Button title="Resume" onPress={() => resume(episode.id)} /> : null}
         {episode.status === 'error' && episode.pageUrl ? (
           <Button

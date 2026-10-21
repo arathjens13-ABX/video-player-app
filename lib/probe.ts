@@ -1,6 +1,9 @@
+import { formatBytes } from './format';
 import { describeStream, type StreamInfo } from './hls';
 import { requestHeaders, withTimeout } from './http';
 import { URL } from './url';
+
+const MIN_VIDEO_BYTES = 1e6;
 
 export type Candidate = {
   url: string;
@@ -45,7 +48,10 @@ export async function probe(c: Candidate, userAgent: string): Promise<ProbeResul
     }
     const range = res.headers.get('content-range');
     const total = range?.match(/\/(\d+)$/)?.[1] ?? (res.status === 200 ? res.headers.get('content-length') : null);
-    return { status: 'ok', kind: 'file', size: total ? Number(total) : null, contentType };
+    const size = total ? Number(total) : null;
+    // Players fetch small pieces (thumbnails, headers of a stream) from video hosts too.
+    if (size !== null && size < MIN_VIDEO_BYTES) return { status: 'invalid', reason: `Too small to be a video (${formatBytes(size)})` };
+    return { status: 'ok', kind: 'file', size, contentType };
   } catch (e) {
     return { status: 'invalid', reason: e instanceof Error ? e.message : String(e) };
   }

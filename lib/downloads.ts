@@ -23,6 +23,8 @@ import { USER_AGENT } from './ua';
 import { URL } from './url';
 
 const MAX_CONCURRENT = 2;
+/** Progress note while a stream's pieces are put together into the MP4. */
+export const FINISHING = 'Finishing…';
 const MAX_STREAM_HEIGHT = 1080;
 const KEEP_AWAKE_TAG = 'vidstash-downloads';
 const DB_PROGRESS_INTERVAL_MS = 1000;
@@ -105,7 +107,8 @@ function pump() {
  * is the episode's current job: once removed or replaced it winds down quietly.
  */
 type Job = {
-  pause(): void;
+  /** Asks the job to stop where it can pick up again; false when it can't (finishing a stream). */
+  pause(): boolean;
   cancel(): void;
   /** Settles when the job has completely stopped. */
   done: Promise<void>;
@@ -115,7 +118,7 @@ type Job = {
 function start(episode: Episode) {
   logInfo('download', `#${episode.id} start ${episode.kind}${episode.maxHeight ? ` ≤${episode.maxHeight}p` : ''} ${shortUrl(episode.sourceUrl)}`);
   updateEpisode(episode.id, { status: 'downloading', error: null });
-  const job: Job = { pause() {}, cancel() {}, done: Promise.resolve(), isCurrent: () => active.get(episode.id) === job };
+  const job: Job = { pause: () => false, cancel() {}, done: Promise.resolve(), isCurrent: () => active.get(episode.id) === job };
   active.set(episode.id, job);
   job.done = (episode.kind === 'hls' ? runStream(episode, job) : runFile(episode, job))
     .catch((err: unknown) => failed(job, episode.id, err))
@@ -181,7 +184,10 @@ async function runFile(episode: Episode, job: Job): Promise<void> {
     task = File.createDownloadTask(episode.sourceUrl, destination, options);
     run = () => task.downloadAsync();
   }
-  job.pause = () => task.pause();
+  job.pause = () => {
+    task.pause();
+    return true;
+  };
   job.cancel = () => task.cancel();
 
   return run()
@@ -237,6 +243,7 @@ function runStream(episode: Episode, job: Job): Promise<void> {
   job.pause = () => {
     pausing = true;
     controller.abort();
+    return true;
   };
   job.cancel = () => controller.abort();
   const headers = JSON.parse(episode.headersJson) as Record<string, string>;
@@ -278,6 +285,8 @@ function runStream(episode: Episode, job: Job): Promise<void> {
       throw new Error(`Not enough free space to finish: free up about ${formatBytes(headroom - freeNow)}`);
     }
 
+    // Assembling is local and quick, and the pieces it has used are gone: let it finish.
+    job.pause = () => false;
     videosDir.create({ idempotent: true, intermediates: true });
     logInfo('stream', `#${episode.id} assembling ${formatBytes(pieces)} of pieces`);
     const sink = new FileSink(videoFile(episode));
@@ -286,7 +295,7 @@ function runStream(episode: Episode, job: Job): Promise<void> {
       duration = await assemble(plan, store, sink, {
         signal: controller.signal,
         consumeParts: true,
-        onProgress: (f) => report({ bytesWritten: sink.position, totalBytes: -1, fraction: f, note: 'Finishing…' }),
+        onProgress: (f) => report({ bytesWritten: sink.position, totalBytes: -1, fraction: f, note: FINISHING }),
       });
     } catch (e) {
       sink.close();
@@ -393,12 +402,20 @@ function onProgress(id: number, p: Progress) {
 }
 
 export function pause(id: number) {
-  active.get(id)?.pause();
+  const job = active.get(id);
+  // Show it paused straight away; the job itself may take a moment to wind down.
+  if (job?.pause()) updateEpisode(id, { status: 'paused' });
 }
 
 export function resume(id: number) {
-  updateEpisode(id, { status: 'queued', error: null });
-  pump();
+  // A job that is still winding down must stop writing before the next one starts.
+  const winding = active.get(id);
+  (winding?.done ?? Promise.resolve()).then(() => {
+    const episode = getEpisode(id);
+    if (episode?.status !== 'paused') return; // finished, removed or failed meanwhile
+    updateEpisode(id, { status: 'queued', error: null });
+    pump();
+  });
 }
 
 export function retry(id: number) {

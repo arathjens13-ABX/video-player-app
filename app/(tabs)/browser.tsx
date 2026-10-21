@@ -16,6 +16,7 @@ import { candidateKey, type Candidate } from '@/lib/probe';
 import { relink } from '@/lib/downloads';
 import { logInfo, logWarn, shortUrl } from '@/lib/log';
 import { onOpenInBrowser, type BrowserRequest } from '@/lib/open-in-browser';
+import { groupVideos } from '@/lib/candidates';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
 import { loadRecent, rememberVisit, type RecentSite } from '@/lib/recent';
 import { USER_AGENT } from '@/lib/ua';
@@ -196,7 +197,9 @@ export default function BrowserScreen() {
     webview.current?.injectJavaScript(switchServerJs(s.url));
   }
 
-  const found = candidates.filter((c) => probeStatus(c.url) === 'pending' || isOk(probeStatus(c.url))).length;
+  // Distinct videos (a stream's per-quality copies count once); links still being checked light the button too.
+  const found = groupVideos(candidates, probeStatus).length;
+  const checking = candidates.some((c) => probeStatus(c.url) === 'pending');
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -307,10 +310,16 @@ export default function BrowserScreen() {
             onPress={() => setSheetOpen(true)}
             style={({ pressed }) => [
               styles.foundButton,
-              { backgroundColor: found > 0 ? colors.tint : colors.card, opacity: pressed ? 0.7 : 1 },
+              { backgroundColor: found > 0 || checking ? colors.tint : colors.card, opacity: pressed ? 0.7 : 1 },
             ]}>
-            <Text style={[styles.foundText, { color: found > 0 ? '#fff' : colors.text }]}>
-              {found > 0 ? `⬇ ${found} video${found === 1 ? '' : 's'} found` : servers.length > 0 ? `${servers.length} servers` : 'No video yet'}
+            <Text style={[styles.foundText, { color: found > 0 || checking ? '#fff' : colors.text }]}>
+              {found > 0
+                ? `⬇ ${found} video${found === 1 ? '' : 's'} found`
+                : checking
+                  ? 'Checking…'
+                  : servers.length > 0
+                    ? `${servers.length} servers`
+                    : 'No video yet'}
             </Text>
           </Pressable>
           <ToolButton
@@ -339,10 +348,6 @@ export default function BrowserScreen() {
       />
     </SafeAreaView>
   );
-}
-
-function isOk(status: ReturnType<typeof probeStatus>) {
-  return typeof status === 'object' && status.status === 'ok';
 }
 
 function samePage(a: string, b: string) {

@@ -45,3 +45,48 @@ export async function withTimeout<T>(ms: number, run: (signal: AbortSignal) => P
     clearTimeout(timer);
   }
 }
+
+function abortError() {
+  const e = new Error('Aborted');
+  e.name = 'AbortError';
+  return e;
+}
+
+/**
+ * Settles as soon as `signal` aborts, whether or not `work` notices. Some
+ * fetch implementations keep reading a response body after its request is
+ * cancelled; a stopped download must not wait on them.
+ */
+export function untilAborted<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) return Promise.reject(abortError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/**
+ * A signal that aborts when `outer` does or after `ms` without finishing.
+ * `timedOut()` tells the two apart.
+ */
+export function deadline(ms: number, outer?: AbortSignal) {
+  const controller = new AbortController();
+  let expired = false;
+  const timer = setTimeout(() => {
+    expired = true;
+    controller.abort();
+  }, ms);
+  const onAbort = () => controller.abort();
+  if (outer?.aborted) controller.abort();
+  outer?.addEventListener('abort', onAbort, { once: true });
+  return {
+    signal: controller.signal,
+    timedOut: () => expired,
+    done() {
+      clearTimeout(timer);
+      outer?.removeEventListener('abort', onAbort);
+    },
+  };
+}
