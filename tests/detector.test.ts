@@ -11,7 +11,12 @@ import { chromium, type Browser, type Page } from 'playwright';
 
 import { DETECTOR_JS, switchServerJs } from '../lib/detector';
 
-type Msg = { type: string; url?: string; kind?: string; via?: string; servers?: { label: string; url: string }[]; title?: string };
+type Msg = {
+  type: string;
+  series?: string;
+  listUrl?: string;
+  episodes?: { url: string; num: string; title: string }[];
+  url?: string; kind?: string; via?: string; servers?: { label: string; url: string }[]; title?: string };
 
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64');
 
@@ -21,6 +26,7 @@ const SITE = `<!doctype html><html><head><title>Soul Land 2 Episode 61 Indonesia
   <option value="${b64('<iframe src="https://player.test/embed/a" allowfullscreen></iframe>')}">Hardsub English Player A</option>
   <option value="${b64('<div><iframe width="640" src="//player.test/embed/b"></iframe></div>')}">Hardsub Indonesia Player B</option>
 </select>
+<div class="naveps bignav"><div class="nvs nvsc"><a href='https://series.test/soul-land-2/' aria-label='All Episodes'>All Episodes</a></div></div>
 <div id="pembed"><iframe src="https://player.test/embed/a" width="360" height="200"></iframe></div>
 <iframe src="https://ads.test/banner" width="1" height="1"></iframe>
 <script>
@@ -48,6 +54,18 @@ const EMBED = `<!doctype html><html><body>
 </script>
 </body></html>`;
 
+// Season page (animestream theme), as on animexin.dev, newest first.
+const SERIES = `<!doctype html><html><head><title>Soul Land 2 - AnimeXin</title></head><body>
+<div class="infox"><h1 class="entry-title">Soul Land 2:  The Peerless Tang Sect</h1></div>
+<div class="eplister"><ul>
+  <li data-index="0"><a href="https://site.test/soul-land-2-episode-62/"><div class="epl-num">62 [111]</div>
+    <div class="epl-title">Soul Land 2 Episode 62 [111] Subtitle</div><div class="epl-date">October 19, 2026</div></a></li>
+  <li data-index="1"><a href="/soul-land-2-episode-61/"><div class="epl-num">61</div>
+    <div class="epl-title">Soul Land 2 Episode 61 Subtitle</div></a></li>
+  <li data-index="2"><a href="/soul-land-2-episode-61/"><div class="epl-num">61</div><div class="epl-title">duplicate</div></a></li>
+</ul></div>
+</body></html>`;
+
 let browser: Browser;
 
 before(async () => {
@@ -58,7 +76,7 @@ after(async () => {
   await browser?.close();
 });
 
-async function openSite(): Promise<{ page: Page; msgs: Msg[] }> {
+async function openSite(address = 'https://site.test/soul-land-2-episode-61/'): Promise<{ page: Page; msgs: Msg[] }> {
   const context = await browser.newContext();
   const msgs: Msg[] = [];
   await context.exposeBinding('__vsReport', (_src, s: string) => {
@@ -72,6 +90,7 @@ async function openSite(): Promise<{ page: Page; msgs: Msg[] }> {
     const url = new URL(route.request().url());
     const html = (body: string) => route.fulfill({ status: 200, contentType: 'text/html', body });
     if (url.host === 'site.test') return html(SITE);
+    if (url.host === 'series.test') return html(SERIES);
     if (url.host === 'player.test') return html(EMBED);
     if (url.pathname === '/api/sources') {
       return route.fulfill({
@@ -87,7 +106,7 @@ async function openSite(): Promise<{ page: Page; msgs: Msg[] }> {
     return route.fulfill({ status: 204, body: '' });
   });
   const page = await context.newPage();
-  await page.goto('https://site.test/soul-land-2-episode-61/');
+  await page.goto(address);
   await page.waitForTimeout(1500);
   return { page, msgs };
 }
@@ -189,4 +208,24 @@ test('plain-URL mirror pickers are listed and t.co frames are not', async () => 
   await page.waitForTimeout(300);
   assert.equal(await page.evaluate(() => (window as unknown as { picked?: string }).picked), 'https://site2.test/jade-dynasty-episode-10/v/2/');
   await context.close();
+});
+
+test('reads a season page’s episode list', async () => {
+  const { page, msgs } = await openSite('https://series.test/soul-land-2/');
+  const list = msgs.filter((m) => m.type === 'episodes').pop();
+  assert.equal(list?.series, 'Soul Land 2: The Peerless Tang Sect');
+  assert.equal(list?.listUrl, 'https://series.test/soul-land-2/');
+  assert.deepEqual(list?.episodes, [
+    { url: 'https://site.test/soul-land-2-episode-62/', num: '62 [111]', title: 'Soul Land 2 Episode 62 [111] Subtitle' },
+    { url: 'https://series.test/soul-land-2-episode-61/', num: '61', title: 'Soul Land 2 Episode 61 Subtitle' },
+  ]);
+  await page.context().close();
+});
+
+test('an episode page points to its season’s episode list', async () => {
+  const { page, msgs } = await openSite();
+  const list = msgs.filter((m) => m.type === 'episodes').pop();
+  assert.equal(list?.listUrl, 'https://series.test/soul-land-2/');
+  assert.deepEqual(list?.episodes, []);
+  await page.context().close();
 });

@@ -8,9 +8,9 @@ import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewNavigationEvent 
 import { DetectedSheet } from '@/components/DetectedSheet';
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
-import { addressToUrl, sameSite, shouldBlockNavigation } from '@/lib/browser';
+import { addressToUrl, baseDomain, sameSite, shouldBlockNavigation } from '@/lib/browser';
 import { DETECTOR_JS, switchServerJs } from '@/lib/detector';
-import { parseDetectorMessage, type Server } from '@/lib/detector-messages';
+import { parseDetectorMessage, type ListedEpisode, type Server } from '@/lib/detector-messages';
 import { hostOf } from '@/lib/links';
 import { candidateKey, type Candidate } from '@/lib/probe';
 import { relink } from '@/lib/downloads';
@@ -19,7 +19,9 @@ import { onOpenInBrowser, type BrowserRequest } from '@/lib/open-in-browser';
 import { groupVideos } from '@/lib/candidates';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
 import { loadRecent, rememberVisit, type RecentSite } from '@/lib/recent';
+import { preferredServer, rememberServer, setSeasonDraft } from '@/lib/season-draft';
 import { USER_AGENT } from '@/lib/ua';
+import { URL } from '@/lib/url';
 
 const SUGGESTED: RecentSite[] = [{ url: 'https://animexin.dev/', title: 'AnimeXin' }];
 
@@ -33,6 +35,7 @@ export default function BrowserScreen() {
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false, loading: false, url: '', title: '' });
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [servers, setServers] = useState<Server[]>([]);
+  const [season, setSeason] = useState<{ listUrl: string; episodes: ListedEpisode[] } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [recent, setRecent] = useState(loadRecent);
@@ -53,6 +56,7 @@ export default function BrowserScreen() {
     userTyped.current = true;
     setCandidates([]);
     setServers([]);
+    setSeason(null);
     candidateKeys.current.clear();
     serverCount.current = -1;
     setBlocked(null);
@@ -113,6 +117,8 @@ export default function BrowserScreen() {
         logInfo('detect', `${msg.servers.length} servers: ${msg.servers.map((x) => hostOf(x.url)).join(', ')}`);
       }
       setServers(msg.servers);
+    } else if (msg.type === 'episodes') {
+      if (msg.episodes.length >= 2) setSeason({ listUrl: msg.listUrl, episodes: msg.episodes });
     } else if (msg.type === 'page') {
       setNav((n) => (n.title === msg.title ? n : { ...n, title: msg.title }));
     }
@@ -128,6 +134,7 @@ export default function BrowserScreen() {
       serverCount.current = -1;
       setCandidates([]);
       setServers([]);
+      setSeason(null);
     }
     setNav((n) => ({ ...n, loading: true }));
   }
@@ -192,9 +199,18 @@ export default function BrowserScreen() {
 
   function switchServer(s: Server) {
     logInfo('browser', `switch server → ${s.label} (${hostOf(s.url)})`);
+    // Season downloads from this site use the same server.
+    if (currentUrl.current && !s.label.startsWith('Current player')) rememberServer(siteOf(currentUrl.current), s.label);
     setSheetOpen(false);
     // Keep earlier finds: they're still downloadable, and the page won't report them twice.
     webview.current?.injectJavaScript(switchServerJs(s.url));
+  }
+
+  function downloadSeason() {
+    if (!season || !currentUrl.current) return;
+    setSheetOpen(false);
+    setSeasonDraft({ ...season, server: preferredServer(siteOf(currentUrl.current)) });
+    router.push('/batch');
   }
 
   // Distinct videos (a stream's per-quality copies count once); links still being checked light the button too.
@@ -310,16 +326,18 @@ export default function BrowserScreen() {
             onPress={() => setSheetOpen(true)}
             style={({ pressed }) => [
               styles.foundButton,
-              { backgroundColor: found > 0 || checking ? colors.tint : colors.card, opacity: pressed ? 0.7 : 1 },
+              { backgroundColor: found > 0 || checking || (season && servers.length === 0) ? colors.tint : colors.card, opacity: pressed ? 0.7 : 1 },
             ]}>
-            <Text style={[styles.foundText, { color: found > 0 || checking ? '#fff' : colors.text }]}>
+            <Text style={[styles.foundText, { color: found > 0 || checking || (season && servers.length === 0) ? '#fff' : colors.text }]}>
               {found > 0
                 ? `⬇ ${found} video${found === 1 ? '' : 's'} found`
                 : checking
                   ? 'Checking…'
-                  : servers.length > 0
-                    ? `${servers.length} servers`
-                    : 'No video yet'}
+                  : season && servers.length === 0
+                    ? `⬇ Season · ${season.episodes.length} episodes`
+                    : servers.length > 0
+                      ? `${servers.length} servers`
+                      : 'No video yet'}
             </Text>
           </Pressable>
           <ToolButton
@@ -332,6 +350,7 @@ export default function BrowserScreen() {
               setAddress('');
               setCandidates([]);
               setServers([]);
+              setSeason(null);
               setBlocked(null);
             }}
           />
@@ -345,9 +364,19 @@ export default function BrowserScreen() {
         servers={servers}
         onDownload={download}
         onSwitchServer={switchServer}
+        seasonCount={season?.episodes.length ?? 0}
+        onDownloadSeason={downloadSeason}
       />
     </SafeAreaView>
   );
+}
+
+function siteOf(url: string) {
+  try {
+    return baseDomain(new URL(url).hostname);
+  } catch {
+    return url;
+  }
 }
 
 function samePage(a: string, b: string) {

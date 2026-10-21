@@ -48,6 +48,18 @@ const MIGRATIONS: string[] = [
     createdAt INTEGER NOT NULL
   );`,
   `ALTER TABLE episodes ADD COLUMN maxHeight INTEGER;`,
+  // Season downloads: episodes waiting for their video to be found (see lib/batch.ts).
+  `CREATE TABLE batch_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    show TEXT NOT NULL,
+    title TEXT NOT NULL,
+    pageUrl TEXT NOT NULL,
+    server TEXT,
+    maxHeight INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'waiting',
+    error TEXT,
+    createdAt INTEGER NOT NULL
+  );`,
 ];
 
 export const db = SQLite.openDatabaseSync('vidstash.db');

@@ -26,6 +26,8 @@ export function DetectedSheet({
   servers,
   onDownload,
   onSwitchServer,
+  seasonCount,
+  onDownloadSeason,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -33,6 +35,9 @@ export function DetectedSheet({
   servers: Server[];
   onDownload: (c: Candidate) => void;
   onSwitchServer: (s: Server) => void;
+  /** Episodes in the season list on this page (0 when there's none). */
+  seasonCount: number;
+  onDownloadSeason: () => void;
 }) {
   const colors = useColors();
   const [showAll, setShowAll] = useState(false);
@@ -53,6 +58,19 @@ export function DetectedSheet({
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.body}>
+        {seasonCount >= 2 ? (
+          <>
+            <Text style={[styles.section, { color: colors.muted }]}>Season</Text>
+            <Pressable
+              onPress={onDownloadSeason}
+              style={({ pressed }) => [styles.row, { backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
+              <Text style={styles.cardTitle}>Download several…</Text>
+              <Text style={[styles.rowMeta, { color: colors.muted }]}>
+                {seasonCount} episodes listed. Pick a range and see how much space it takes first.
+              </Text>
+            </Pressable>
+          </>
+        ) : null}
         <Text style={[styles.section, { color: colors.muted }]}>Videos</Text>
         {groups.map((g, i) => (
           <VideoCard

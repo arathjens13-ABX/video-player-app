@@ -5,6 +5,8 @@ import { Platform } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { VideoFinder } from '@/components/VideoFinder';
+import { initBatch } from '@/lib/batch';
 import { installCrashLogging } from '@/lib/crash';
 import { initDownloads } from '@/lib/downloads';
 import { logInfo } from '@/lib/log';
@@ -26,6 +28,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     initDownloads();
+    initBatch();
   }, []);
 
   return (
@@ -33,12 +36,14 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="episode-form" options={{ presentation: 'modal', title: 'Episode' }} />
+        <Stack.Screen name="batch" options={{ presentation: 'modal', title: 'Download several' }} />
         <Stack.Screen name="open" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen
           name="player/[id]"
           options={{ presentation: 'fullScreenModal', headerShown: false }}
         />
       </Stack>
+      <VideoFinder />
     </ThemeProvider>
   );
 }

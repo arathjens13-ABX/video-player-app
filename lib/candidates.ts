@@ -24,7 +24,7 @@ function topHeight(r: Checked['r']) {
   return r.kind === 'hls' ? (r.info.qualities[0]?.height ?? 0) : 0;
 }
 
-function isEpisodeLength(r: Checked['r']) {
+export function isEpisodeLength(r: Checked['r']) {
   return r.kind === 'hls' ? r.info.duration >= EPISODE_SEC : (r.size ?? 0) >= EPISODE_BYTES;
 }
 

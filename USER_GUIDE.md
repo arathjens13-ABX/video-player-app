@@ -88,6 +88,22 @@ SideStore is ready. You won't need the PC again unless something goes badly wron
 
 ---
 
+## Downloading several episodes at once
+
+1. In the **Browser**, open a show's episode list (the season page), or any episode page that lists the other episodes.
+2. Tap the bottom button, then **Download several…**
+3. Pick the episodes: **Next 10** (after the last one you have), **Latest 10**, **All**, or type a range like 40 to 60. Episodes you already have are skipped.
+4. Pick a **Quality** (720p is the default and about half the size of 1080p).
+5. Check the **Space** box. VidStash checks one episode and shows roughly how big the whole batch is and how much free space you'll have left.
+6. Tap **Download N episodes**.
+
+How it works and what to expect:
+
+- It uses the **server you last switched to** on that site (for example Dailymotion). If an episode doesn't have that server, it uses whatever the episode page plays first.
+- Each episode's video is found right before it downloads, one at a time, so links don't expire while they wait. **Keep VidStash open** while it runs (the screen stays on).
+- It **never takes your phone below 20 GB free**. If it gets there, it stops and says so: delete some episodes, then tap **Resume**.
+- The **Downloads** tab shows the list under **Season downloads**, with **Pause**, **Resume** and **Stop**. An episode whose video can't be found is marked so; tap **Retry**, or **Open page** to do it by hand.
+
 ## Watching offline
 
 - Go to the **Library** tab. Episodes are grouped by show, in order.

@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput } from 'react-native';
 
+import { BatchSection } from '@/components/BatchSection';
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import type { Episode } from '@/lib/db';
@@ -77,6 +78,7 @@ export default function DownloadsScreen() {
         </Text>
       }
       renderItem={({ item }) => <DownloadRow episode={item} />}
+      ListFooterComponent={<BatchSection />}
     />
   );
 }

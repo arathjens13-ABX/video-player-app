@@ -224,6 +224,42 @@ export const DETECTOR_JS = String.raw`
     }
   }
 
+  // Season pages list every episode (".eplister" in the animestream theme); episode pages
+  // link to that list ("All Episodes"). Both feed "Download several".
+  var lastEpisodes = '';
+  function collectEpisodes() {
+    var links = document.querySelectorAll('.eplister li a[href], .episodelist li a[href], ul.episodios li a[href]');
+    var episodes = [];
+    var seen = {};
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      var url = absolute(a.getAttribute('href'));
+      if (!url || seen[url]) continue;
+      seen[url] = true;
+      var num = a.querySelector('.epl-num, .epl-no, .numerando');
+      var title = a.querySelector('.epl-title, .playinfo h3, .eptitle, .episodiotitle');
+      episodes.push({
+        url: url,
+        num: ((num && num.textContent) || '').replace(/\s+/g, ' ').trim(),
+        title: ((title && title.textContent) || a.textContent || '').replace(/\s+/g, ' ').trim()
+      });
+    }
+    var all = document.querySelector('a[aria-label="All Episodes"], .naveps .nvsc a[href]');
+    var heading = document.querySelector('h1.entry-title, .infox h1, h1');
+    var msg = {
+      type: 'episodes',
+      series: ((heading && heading.textContent) || '').replace(/\s+/g, ' ').trim(),
+      listUrl: episodes.length >= 2 ? location.href : (all && absolute(all.getAttribute('href'))) || null,
+      episodes: episodes.length >= 2 ? episodes : []
+    };
+    if (!msg.listUrl) return;
+    var json = JSON.stringify(msg);
+    if (json !== lastEpisodes) {
+      lastEpisodes = json;
+      post(msg);
+    }
+  }
+
   function scanInlineScripts() {
     var scripts = document.querySelectorAll('script:not([src])');
     for (var i = 0; i < scripts.length; i++) scanText(scripts[i].textContent, 'page');
@@ -242,6 +278,7 @@ export const DETECTOR_JS = String.raw`
       timer = null;
       if (isTop) {
         collectServers();
+        collectEpisodes();
         post({ type: 'page', title: document.title, url: location.href });
       }
       var videos = document.querySelectorAll('video');
@@ -319,3 +356,35 @@ export function switchServerJs(url: string): string {
 true;
 `;
 }
+
+/**
+ * For the hidden browser behind season downloads only: nobody is there to press
+ * play, and some players (Odysee) don't load their stream until playback
+ * starts. Starts any video muted and presses the usual big play buttons, for
+ * the first 30 seconds of each frame.
+ */
+export const AUTOPLAY_JS = String.raw`
+(function () {
+  if (window.__vsAutoplay) return;
+  window.__vsAutoplay = true;
+  var BUTTONS = '.vjs-big-play-button, .plyr__control--overlaid, .jw-display-icon-container, .jw-icon-display, ' +
+    '.dmp_StartView, .np_ButtonPlay, button[aria-label^="Play"], button[title^="Play"], [class*="play-button"], [class*="PlayButton"]';
+  var started = Date.now();
+  var timer = setInterval(function () {
+    if (Date.now() - started > 30000) return clearInterval(timer);
+    try {
+      var videos = document.querySelectorAll('video');
+      for (var i = 0; i < videos.length; i++) {
+        var v = videos[i];
+        v.muted = true;
+        if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+      }
+      if (videos.length === 0 || videos[0].paused) {
+        var b = document.querySelector(BUTTONS);
+        if (b) b.click();
+      }
+    } catch (e) {}
+  }, 1500);
+})();
+true;
+`;
