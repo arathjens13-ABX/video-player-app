@@ -240,7 +240,7 @@ export default function BrowserScreen() {
       {blocked ? (
         <View style={[styles.banner, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
           <Text style={styles.bannerText} numberOfLines={2}>
-            Blocked a redirect to {hostOf(blocked)}
+            Stopped the page from opening {hostOf(blocked)}
           </Text>
           <Pressable
             onPress={() => {

@@ -21,9 +21,22 @@ test('blocks scripted cross-site redirects of the whole page', () => {
   );
 });
 
-test('allows taps, same-site redirects, iframes and typed addresses', () => {
+test('blocks taps that leave the site (invisible ad links over the player)', () => {
   const base = { currentUrl: page, isTopFrame: true, userTyped: false };
-  assert.equal(shouldBlockNavigation({ ...base, url: 'https://other.example/', navigationType: 'click' }), false);
+  assert.equal(shouldBlockNavigation({ ...base, url: 'https://digital.americascardroom.eu/lp/', navigationType: 'click' }), true);
+  assert.equal(shouldBlockNavigation({ ...base, url: 'https://animexin.dev/episode-2/', navigationType: 'click' }), false);
+});
+
+test('allows search results, back/forward and reloads to other sites', () => {
+  const base = { isTopFrame: true, userTyped: false, url: 'https://animexin.dev/' };
+  assert.equal(shouldBlockNavigation({ ...base, currentUrl: 'https://duckduckgo.com/?q=animexin', navigationType: 'click' }), false);
+  assert.equal(shouldBlockNavigation({ ...base, currentUrl: 'https://www.google.com/search?q=x', navigationType: 'click' }), false);
+  assert.equal(shouldBlockNavigation({ ...base, currentUrl: 'https://other.example/', navigationType: 'backforward' }), false);
+  assert.equal(shouldBlockNavigation({ ...base, currentUrl: 'https://other.example/', navigationType: 'reload' }), false);
+});
+
+test('allows same-site redirects, iframes and typed addresses', () => {
+  const base = { currentUrl: page, isTopFrame: true, userTyped: false };
   assert.equal(shouldBlockNavigation({ ...base, url: 'https://animexin.dev/next/', navigationType: 'other' }), false);
   assert.equal(shouldBlockNavigation({ ...base, url: 'https://player.example/embed', navigationType: 'other', isTopFrame: false }), false);
   assert.equal(shouldBlockNavigation({ ...base, url: 'https://other.example/', navigationType: 'other', userTyped: true }), false);

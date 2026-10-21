@@ -15,10 +15,15 @@ export function sameSite(a: string, b: string): boolean {
   }
 }
 
+/** Sites whose links lead elsewhere by design: following a result is never an ad hijack. */
+const LINK_HUBS = new Set(['duckduckgo.com', 'google.com', 'bing.com']);
+
 /**
- * Ad scripts on streaming sites love to redirect the whole page to another site
- * without the user tapping anything. Block top-frame navigations to a different
- * site unless the user tapped a link or typed the address.
+ * Ad scripts on streaming sites send the whole page to another site, either on
+ * their own or by laying invisible links over the player so a tap on Play
+ * leaves the site (seen on animexin). Block every top-frame move to a different
+ * site unless the user typed the address, went back/forward or reloaded, or
+ * tapped a search result; the banner offers "Open anyway".
  */
 export function shouldBlockNavigation(opts: {
   url: string;
@@ -30,8 +35,16 @@ export function shouldBlockNavigation(opts: {
   const { url, currentUrl, isTopFrame, navigationType, userTyped } = opts;
   if (!isTopFrame || userTyped || !currentUrl) return false;
   if (!/^https?:/i.test(url)) return !/^(about|blob|data):/i.test(url); // block app-store and other scheme jumps
-  if (navigationType !== 'other') return false; // clicks, back/forward, reloads, form posts are the user's
-  return !sameSite(url, currentUrl);
+  // Android doesn't say how a navigation started, so it can't tell a tap from a script.
+  if (navigationType === undefined) return false;
+  if (navigationType === 'backforward' || navigationType === 'reload') return false;
+  if (sameSite(url, currentUrl)) return false;
+  try {
+    if (navigationType === 'click' && LINK_HUBS.has(baseDomain(new URL(currentUrl).hostname))) return false;
+  } catch {
+    // An unparseable current address is treated like any other site.
+  }
+  return true;
 }
 
 /** Address bar input: a URL, or a search for anything else. */
