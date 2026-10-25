@@ -106,10 +106,15 @@ How it works and what to expect:
 
 ## Watching offline
 
-- Go to the **Library** tab. Episodes are grouped by show, in order.
-- Tap an episode to play it. It remembers where you stopped, and the next episode starts automatically when one finishes (5-second countdown, with Cancel).
+- Go to the **Library** tab. **Continue watching** at the top has the episode you stopped partway through (or the next one) for each show you're watching. Below it, episodes are grouped by show, in order, with how much space each show uses.
+- Tap an episode to play it. It opens **sideways and full screen**, even with your rotation lock on (turn this off in Settings → Player). It remembers where you stopped, and the next episode starts automatically when one finishes (5-second countdown, with Cancel).
+- In the player, tap the video to show the controls:
+  - **Double-tap** the left or right side to skip back or forward 10 seconds; keep tapping to skip more.
+  - **Skip intro** (first few minutes) jumps ahead 90 seconds.
+  - Top bar: **speed** (1× → 1.25× → 1.5× → 2× → 0.75×), **AirPlay**, **Picture in Picture**, and **rotate** (sideways ↔ upright).
+  - Drag along the bar at the bottom to jump anywhere.
 - Long-press an **episode** to rename it, mark it watched, or delete it.
-- Long-press a **show name** to mark the whole show watched or delete it.
+- Tap **•••** next to a show name to mark the whole show watched, **delete the watched episodes**, or delete the show.
 - Your videos also appear in the **Files** app under *On My iPhone › VidStash*.
 
 ---

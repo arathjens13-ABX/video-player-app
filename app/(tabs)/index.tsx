@@ -1,14 +1,14 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, Pressable, SectionList, StyleSheet } from 'react-native';
+import { Alert, Pressable, ScrollView, SectionList, StyleSheet } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { Thumbnail } from '@/components/Thumbnail';
 import { useColors } from '@/components/useColors';
 import { batch, updateEpisode, type Episode } from '@/lib/db';
 import { remove } from '@/lib/downloads';
-import { formatDuration } from '@/lib/format';
-import { groupByShow } from '@/lib/library';
+import { formatBytes, formatDuration } from '@/lib/format';
+import { continueWatching, groupByShow, showBytes } from '@/lib/library';
 import { useEpisodes } from '@/lib/hooks';
 
 export default function LibraryScreen() {
@@ -16,6 +16,8 @@ export default function LibraryScreen() {
   const colors = useColors();
 
   const sections = useMemo(() => groupByShow(episodes), [episodes]);
+  const resume = useMemo(() => continueWatching(episodes), [episodes]);
+  const play = (id: number) => router.push({ pathname: '/player/[id]', params: { id } });
 
   function showActions(e: Episode) {
     Alert.alert(e.title, e.show, [
@@ -90,13 +92,52 @@ export default function LibraryScreen() {
       sections={sections}
       keyExtractor={(e) => String(e.id)}
       contentInsetAdjustmentBehavior="automatic"
+      ListHeaderComponent={
+        resume.length > 0 ? (
+          <View>
+            <Text style={[styles.sectionTitle, styles.continueTitle]}>Continue watching</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
+              {resume.map(({ episode, resume: partway }) => {
+                const fraction = episode.durationSec > 0 ? Math.min(1, episode.positionSec / episode.durationSec) : 0;
+                return (
+                  <Pressable
+                    key={episode.id}
+                    onPress={() => play(episode.id)}
+                    style={({ pressed }) => [styles.continueCard, { backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
+                    <Thumbnail episode={episode} width={220} />
+                    <View style={styles.continueText} lightColor="transparent" darkColor="transparent">
+                      <Text style={styles.continueShow} numberOfLines={1}>
+                        {episode.show}
+                      </Text>
+                      <Text style={[styles.rowMeta, { color: colors.muted }]} numberOfLines={1}>
+                        {partway ? `Resume ${episode.title}` : `Next: ${episode.title}`}
+                      </Text>
+                    </View>
+                    {partway && fraction > 0 ? (
+                      <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+                        <View style={[styles.progressFill, { width: `${fraction * 100}%`, backgroundColor: colors.tint }]} />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null
+      }
       renderSectionHeader={({ section }) => (
         <Pressable onLongPress={() => showShowActions(section.title, section.data)}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <Text style={[styles.sectionMeta, { color: colors.muted }]}>
-              {section.data.length} episode{section.data.length === 1 ? '' : 's'}
-            </Text>
+            <View style={styles.sectionText}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <Text style={[styles.sectionMeta, { color: colors.muted }]}>
+                {section.data.length} episode{section.data.length === 1 ? '' : 's'} · {formatBytes(showBytes(section.data))}
+                {section.data.some((e) => e.watched) ? ` · ${section.data.filter((e) => e.watched).length} watched` : ''}
+              </Text>
+            </View>
+            <Pressable onPress={() => showShowActions(section.title, section.data)} hitSlop={12} accessibilityLabel={`${section.title} options`}>
+              <Text style={[styles.more, { color: colors.tint }]}>•••</Text>
+            </Pressable>
           </View>
         </Pressable>
       )}
@@ -104,7 +145,7 @@ export default function LibraryScreen() {
         const fraction = item.durationSec > 0 ? Math.min(1, item.positionSec / item.durationSec) : 0;
         return (
           <Pressable
-            onPress={() => router.push({ pathname: '/player/[id]', params: { id: item.id } })}
+            onPress={() => play(item.id)}
             onLongPress={() => showActions(item)}
             style={({ pressed }) => [styles.row, { backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
             <View style={styles.rowInner} lightColor="transparent" darkColor="transparent">
@@ -136,8 +177,15 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { fontSize: 20, fontWeight: '600', marginBottom: 8 },
   emptyBody: { fontSize: 15, textAlign: 'center', lineHeight: 21 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
-  sectionMeta: { fontSize: 13 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
+  sectionText: { flex: 1 },
+  sectionMeta: { fontSize: 13, marginTop: 2 },
+  more: { fontSize: 18, fontWeight: '700', paddingHorizontal: 4 },
+  continueTitle: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  continueRow: { paddingHorizontal: 16, gap: 10 },
+  continueCard: { width: 220, borderRadius: 10, overflow: 'hidden' },
+  continueText: { padding: 10 },
+  continueShow: { fontSize: 15, fontWeight: '600' },
   sectionTitle: { fontSize: 18, fontWeight: '700' },
   row: { marginHorizontal: 16, marginBottom: 8, borderRadius: 10, overflow: 'hidden' },
   rowInner: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 12 },

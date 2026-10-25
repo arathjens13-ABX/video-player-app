@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { Paths } from 'expo-file-system';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Switch } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
@@ -12,12 +12,13 @@ import { formatBytes } from '@/lib/format';
 import { useEpisodes } from '@/lib/hooks';
 import { clearLog, getLogEntries } from '@/lib/log';
 import { BUILD, buildReport } from '@/lib/report';
-import { QUALITY_OPTIONS, setStreamQuality, useStreamQuality } from '@/lib/settings';
+import { QUALITY_OPTIONS, setStartLandscape, setStreamQuality, useStartLandscape, useStreamQuality } from '@/lib/settings';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const episodes = useEpisodes();
   const quality = useStreamQuality();
+  const startLandscape = useStartLandscape();
   const [temp, setTemp] = useState(0);
   const [logCount, setLogCount] = useState(0);
   // Filled in (and refreshed) each time the tab is shown.
@@ -102,6 +103,20 @@ export default function SettingsScreen() {
       </View>
       <Text style={[styles.hint, { color: colors.muted }]}>
         Applies to stream downloads you add from now on. MP4 files come in whatever quality the site offers.
+      </Text>
+
+      <Text style={styles.heading}>Player</Text>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <View style={styles.row} lightColor="transparent" darkColor="transparent">
+          <View style={{ flex: 1 }} lightColor="transparent" darkColor="transparent">
+            <Text style={styles.rowLabel}>Open videos sideways</Text>
+            <Text style={[styles.rowHint, { color: colors.muted }]}>Full screen in landscape, even with rotation lock on</Text>
+          </View>
+          <Switch value={startLandscape} onValueChange={setStartLandscape} />
+        </View>
+      </View>
+      <Text style={[styles.hint, { color: colors.muted }]}>
+        The rotate button in the player switches between sideways and upright at any time.
       </Text>
 
       <Text style={styles.heading}>Diagnostics</Text>

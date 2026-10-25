@@ -40,3 +40,36 @@ export function useStreamQuality() {
   }, []);
   return q;
 }
+
+const LANDSCAPE_KEY = 'settings.startLandscape';
+const landscapeListeners = new Set<() => void>();
+
+/** Whether the player turns the screen sideways when a video opens (works with rotation lock on). */
+export function getStartLandscape(): boolean {
+  try {
+    return Storage.getItemSync(LANDSCAPE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+export function setStartLandscape(on: boolean) {
+  try {
+    Storage.setItemSync(LANDSCAPE_KEY, on ? '1' : '0');
+  } catch {
+    // Falls back to the default next time.
+  }
+  landscapeListeners.forEach((l) => l());
+}
+
+export function useStartLandscape() {
+  const [on, setOn] = useState(getStartLandscape);
+  useEffect(() => {
+    const l = () => setOn(getStartLandscape());
+    landscapeListeners.add(l);
+    return () => {
+      landscapeListeners.delete(l);
+    };
+  }, []);
+  return on;
+}

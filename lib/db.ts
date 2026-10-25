@@ -25,6 +25,8 @@ export type Episode = {
   createdAt: number;
   /** Highest stream quality (video height) chosen when the download was added. */
   maxHeight: number | null;
+  /** When it was last played (ms), for "Continue watching". */
+  lastPlayedAt: number | null;
 };
 
 const MIGRATIONS: string[] = [
@@ -60,6 +62,7 @@ const MIGRATIONS: string[] = [
     error TEXT,
     createdAt INTEGER NOT NULL
   );`,
+  `ALTER TABLE episodes ADD COLUMN lastPlayedAt INTEGER;`,
 ];
 
 export const db = SQLite.openDatabaseSync('vidstash.db');

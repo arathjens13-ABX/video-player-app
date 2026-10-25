@@ -46,3 +46,32 @@ export function nextEpisode<T extends Pick<Episode, 'id' | 'show' | 'title' | 'c
   const i = show.data.findIndex((e) => e.id === current.id);
   return i >= 0 && i + 1 < show.data.length ? show.data[i + 1] : null;
 }
+
+type Playable = Pick<Episode, 'id' | 'show' | 'title' | 'createdAt' | 'status' | 'positionSec' | 'watched' | 'lastPlayedAt'>;
+
+/**
+ * One episode per show you've been watching, most recently played first: the
+ * one you stopped partway through, or else the next one after the last you
+ * played. Shows you're caught up on (or never started) don't appear.
+ */
+export function continueWatching<T extends Playable>(episodes: T[]): { episode: T; resume: boolean }[] {
+  const out: { episode: T; resume: boolean; at: number }[] = [];
+  for (const show of groupByShow(episodes)) {
+    const played = show.data.filter((e) => e.lastPlayedAt);
+    if (played.length === 0) continue;
+    const last = played.reduce((a, b) => ((b.lastPlayedAt ?? 0) > (a.lastPlayedAt ?? 0) ? b : a));
+    const at = last.lastPlayedAt ?? 0;
+    if (last.positionSec > 0 && !last.watched) {
+      out.push({ episode: last, resume: true, at });
+      continue;
+    }
+    const next = show.data.slice(show.data.indexOf(last) + 1).find((e) => !e.watched);
+    if (next) out.push({ episode: next, resume: next.positionSec > 0, at });
+  }
+  return out.sort((a, b) => b.at - a.at).map(({ episode, resume }) => ({ episode, resume }));
+}
+
+/** Space a show's downloaded episodes take on the phone. */
+export function showBytes(list: Pick<Episode, 'bytesWritten' | 'status'>[]): number {
+  return list.reduce((n, e) => n + (e.status === 'done' ? Math.max(0, e.bytesWritten) : 0), 0);
+}

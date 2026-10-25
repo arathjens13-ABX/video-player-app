@@ -9,7 +9,8 @@ import { ensureThumbnail, thumbFile } from '@/lib/thumbs';
 import { useColors } from './useColors';
 
 /** The episode's still, made on first display for videos downloaded before thumbnails existed. */
-export function Thumbnail({ episode }: { episode: Episode }) {
+/** `width` sets a larger 16:9 size (the default is a small list thumbnail). */
+export function Thumbnail({ episode, width }: { episode: Episode; width?: number }) {
   const colors = useColors();
   const [uri, setUri] = useState(() => {
     const f = thumbFile(episode.id);
@@ -28,7 +29,7 @@ export function Thumbnail({ episode }: { episode: Episode }) {
   }, [episode, uri]);
 
   return (
-    <View style={[styles.box, { backgroundColor: colors.border }]}>
+    <View style={[styles.box, width ? { width, height: Math.round((width * 9) / 16), borderRadius: 0 } : null, { backgroundColor: colors.border }]}>
       {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={String(episode.id)} /> : null}
     </View>
   );

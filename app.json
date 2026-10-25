@@ -16,7 +16,8 @@
         },
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true
-      }
+      },
+      "requireFullScreen": true
     },
     "android": {
       "package": "com.arathjens.vidstash",
@@ -59,7 +60,13 @@
           }
         }
       ],
-      "expo-image"
+      "expo-image",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "DEFAULT"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

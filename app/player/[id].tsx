@@ -1,21 +1,28 @@
 import { useEventListener } from 'expo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PlayerControls } from '@/components/PlayerControls';
 import { getEpisode, listEpisodes, notify, updateEpisode, type Episode } from '@/lib/db';
 import { videoFile } from '@/lib/downloads';
 import { nextEpisode } from '@/lib/library';
-import { logError, logInfo } from '@/lib/log';
+import { logError, logInfo, logWarn } from '@/lib/log';
+import { getStartLandscape } from '@/lib/settings';
 
 function playEpisode(id: number) {
   router.replace({ pathname: '/player/[id]', params: { id } });
 }
 
 const WATCHED_FRACTION = 0.9;
+
+/** Players on screen; more than one only for a moment while "Up next" swaps episodes. */
+let openPlayers = 0;
+/** The rotate choice of the player just closed, so the next episode keeps it. */
+let lastLandscape: boolean | null = null;
 
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,11 +38,38 @@ function Player({ episodeId }: { episodeId: number }) {
   const uri = episode ? videoFile(episode).uri : null;
 
   const player = useVideoPlayer(uri ? { uri, metadata: { title: episode?.title, artist: episode?.show } } : null, (p) => {
-    p.timeUpdateEventInterval = 2;
+    // Twice a second keeps the scrub bar smooth; the position is saved less often (savePosition).
+    p.timeUpdateEventInterval = 0.5;
     p.showNowPlayingNotification = true;
     p.staysActiveInBackground = true;
+    p.allowsExternalPlayback = true;
     p.play();
   });
+
+  const videoView = useRef<VideoView>(null);
+  const [time, setTime] = useState({ current: episode?.positionSec ?? 0, duration: episode?.durationSec ?? 0 });
+
+  // Sideways on open (if chosen in Settings), even with the phone's rotation lock on; upright again on close.
+  const [landscape, setLandscape] = useState(() => lastLandscape ?? getStartLandscape());
+  useEffect(() => {
+    lastLandscape = landscape;
+    ScreenOrientation.lockAsync(
+      landscape ? ScreenOrientation.OrientationLock.LANDSCAPE : ScreenOrientation.OrientationLock.PORTRAIT_UP
+    ).catch((e: unknown) => logWarn('player', 'rotate failed:', e));
+  }, [landscape]);
+  useEffect(() => {
+    openPlayers++;
+    return () => {
+      openPlayers--;
+      // "Up next" swaps one player for the next: only go upright once no player is left.
+      setTimeout(() => {
+        if (openPlayers === 0) {
+          lastLandscape = null;
+          ScreenOrientation.unlockAsync().catch(() => {});
+        }
+      }, 400);
+    };
+  }, []);
 
   const resumed = useRef(false);
   useEventListener(player, 'sourceLoad', ({ duration, availableVideoTracks, availableAudioTracks }) => {
@@ -56,8 +90,10 @@ function Player({ episodeId }: { episodeId: number }) {
     if (status === 'error') logError('player', `#${episodeId} can't play: ${error?.message ?? 'unknown error'}`);
   });
 
+  const lastSaved = useRef(0);
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
-    savePosition(currentTime);
+    setTime({ current: currentTime, duration: player.duration });
+    if (Math.abs(currentTime - lastSaved.current) >= 2) savePosition(currentTime);
   });
 
   // Pausing (or scrubbing while paused) saves right away, not at the next tick.
@@ -94,9 +130,11 @@ function Player({ episodeId }: { episodeId: number }) {
 
   function savePosition(currentTime: number) {
     if (!episode || !resumed.current) return;
+    lastSaved.current = currentTime;
     const duration = player.duration;
     const watched = duration > 0 && currentTime / duration >= WATCHED_FRACTION;
-    updateEpisode(episode.id, watched ? { positionSec: 0, watched: 1 } : { positionSec: currentTime }, { silent: true });
+    const lastPlayedAt = Date.now();
+    updateEpisode(episode.id, watched ? { positionSec: 0, watched: 1, lastPlayedAt } : { positionSec: currentTime, lastPlayedAt }, { silent: true });
   }
 
   useEffect(() => {
@@ -116,14 +154,30 @@ function Player({ episodeId }: { episodeId: number }) {
     <View style={styles.container}>
       <StatusBar style="light" hidden />
       {uri ? (
-        <VideoView
-          style={StyleSheet.absoluteFill}
-          player={player}
-          nativeControls
-          allowsPictureInPicture
-          contentFit="contain"
-          fullscreenOptions={{ enable: true }}
-        />
+        <>
+          <VideoView
+            ref={videoView}
+            style={StyleSheet.absoluteFill}
+            player={player}
+            nativeControls={false}
+            allowsPictureInPicture
+            startsPictureInPictureAutomatically
+            contentFit="contain"
+          />
+          <PlayerControls
+            player={player}
+            title={episode?.title ?? ''}
+            subtitle={episode?.show ?? ''}
+            currentTime={time.current}
+            duration={time.duration}
+            landscape={landscape}
+            onToggleRotate={() => setLandscape((l) => !l)}
+            onPictureInPicture={() => {
+              videoView.current?.startPictureInPicture().catch((e: unknown) => logWarn('player', 'picture in picture failed:', e));
+            }}
+            onClose={close}
+          />
+        </>
       ) : (
         <Text style={styles.missing}>This video couldn’t be found.</Text>
       )}
@@ -146,11 +200,6 @@ function Player({ episodeId }: { episodeId: number }) {
           </View>
         </View>
       ) : null}
-      <SafeAreaView style={styles.closeWrap} edges={['top', 'left']} pointerEvents="box-none">
-        <Pressable onPress={close} hitSlop={12} style={styles.close}>
-          <Text style={styles.closeText}>✕</Text>
-        </Pressable>
-      </SafeAreaView>
     </View>
   );
 }
@@ -158,17 +207,6 @@ function Player({ episodeId }: { episodeId: number }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
   missing: { color: '#fff', textAlign: 'center', fontSize: 16 },
-  closeWrap: { position: 'absolute', top: 0, left: 0 },
-  close: {
-    margin: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeText: { color: '#fff', fontSize: 18 },
   upNext: {
     position: 'absolute',
     right: 24,
