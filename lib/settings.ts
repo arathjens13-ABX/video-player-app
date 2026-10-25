@@ -73,3 +73,23 @@ export function useStartLandscape() {
   }, []);
   return on;
 }
+
+const SORT_KEY = 'settings.librarySort';
+
+/** How the Library lists shows; remembered between launches. */
+export function getLibrarySort(): 'recent' | 'az' | 'added' {
+  try {
+    const v = Storage.getItemSync(SORT_KEY);
+    return v === 'az' || v === 'added' ? v : 'recent';
+  } catch {
+    return 'recent';
+  }
+}
+
+export function setLibrarySort(sort: 'recent' | 'az' | 'added') {
+  try {
+    Storage.setItemSync(SORT_KEY, sort);
+  } catch {
+    // Not remembered; the default comes back next launch.
+  }
+}

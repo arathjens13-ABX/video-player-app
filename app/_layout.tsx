@@ -36,6 +36,7 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="episode-form" options={{ presentation: 'modal', title: 'Episode' }} />
+        <Stack.Screen name="show/[key]" options={{ title: '', headerBackTitle: 'Library' }} />
         <Stack.Screen name="batch" options={{ presentation: 'modal', title: 'Download several' }} />
         <Stack.Screen name="open" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { DownloadStatus } from '../lib/db';
-import { continueWatching, episodeNumber, groupByShow, nextEpisode, showBytes } from '../lib/library';
+import { continueWatching, episodeNumber, findShows, groupByShow, nextEpisode, showBytes, showSummaries } from '../lib/library';
 
 const ep = (id: number, show: string, title: string, createdAt = id, status: DownloadStatus = 'done') => ({ id, show, title, createdAt, status });
 
@@ -80,4 +80,36 @@ test('show size counts finished downloads only', () => {
     ]),
     125
   );
+});
+
+test('show list: next episode per show, search and sort', () => {
+  const e = (id: number, show: string, n: number, o: { pos?: number; watched?: number; at?: number; added?: number } = {}) => ({
+    ...ep(id, show, `Episode ${n}`, o.added ?? id),
+    positionSec: o.pos ?? 0,
+    watched: o.watched ?? 0,
+    lastPlayedAt: o.at ?? null,
+    bytesWritten: 100,
+  });
+  const shows = showSummaries([
+    e(1, 'Soul Land 2', 1, { watched: 1, at: 50 }),
+    e(2, 'Soul Land 2', 2),
+    e(3, 'Battle Through the Heavens', 4, { pos: 120, at: 90 }),
+    e(4, 'Battle Through the Heavens', 3, { watched: 1, at: 80 }),
+    e(5, 'Renegade Immortal', 1, { added: 500 }),
+    e(6, 'Renegade Immortal', 2, { added: 501 }),
+  ]);
+  const btth = shows.find((s) => s.title.startsWith('Battle'))!;
+  assert.equal(btth.next?.title, 'Episode 4');
+  assert.equal(btth.resume, true);
+  assert.equal(btth.unwatched, 1);
+  assert.equal(btth.bytes, 200);
+  assert.equal(shows.find((s) => s.title === 'Soul Land 2')!.next?.title, 'Episode 2');
+  assert.equal(shows.find((s) => s.title === 'Renegade Immortal')!.next?.title, 'Episode 1'); // never played: from the start
+
+  assert.deepEqual(findShows(shows, '', 'recent').map((s) => s.title), ['Battle Through the Heavens', 'Soul Land 2', 'Renegade Immortal']);
+  assert.deepEqual(findShows(shows, '', 'az').map((s) => s.title), ['Battle Through the Heavens', 'Renegade Immortal', 'Soul Land 2']);
+  assert.deepEqual(findShows(shows, '', 'added').map((s) => s.title), ['Renegade Immortal', 'Battle Through the Heavens', 'Soul Land 2']);
+  assert.deepEqual(findShows(shows, 'land soul', 'az').map((s) => s.title), ['Soul Land 2']);
+  assert.deepEqual(findShows(shows, 'HEAVENS', 'az').map((s) => s.title), ['Battle Through the Heavens']);
+  assert.deepEqual(findShows(shows, 'zzz', 'az'), []);
 });
