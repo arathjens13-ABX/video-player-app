@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { getEpisode, listEpisodes, subscribe, type Episode } from './db';
 import { batchNote, isBatchPaused, listBatch } from './batch';
 import { coverFor } from './covers';
+import { listFollows } from './follows';
 import { getProgress, subscribeProgress, type Progress } from './downloads';
 
 export function useEpisodes(): Episode[] {
@@ -45,4 +46,11 @@ export function useCover(shows: string[]) {
     return subscribe(() => setUri(coverFor(names)));
   }, [key]);
   return uri;
+}
+
+/** Followed shows, kept current. */
+export function useFollows() {
+  const [list, setList] = useState(listFollows);
+  useEffect(() => subscribe(() => setList(listFollows())), []);
+  return list;
 }

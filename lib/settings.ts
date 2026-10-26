@@ -113,3 +113,22 @@ export function setIntroSkip(seriesKey: string, seconds: number) {
     // Back to the default next time.
   }
 }
+
+const SITE_KEY = 'settings.discoverSite';
+
+/** The site Discover shows; remembered between launches. */
+export function getDiscoverSite(): string | null {
+  try {
+    return Storage.getItemSync(SITE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setDiscoverSite(id: string) {
+  try {
+    Storage.setItemSync(SITE_KEY, id);
+  } catch {
+    // Back to the first site next launch.
+  }
+}

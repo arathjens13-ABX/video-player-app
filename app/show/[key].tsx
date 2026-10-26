@@ -4,12 +4,14 @@ import { Pressable, SectionList, StyleSheet } from 'react-native';
 
 import { EpisodeRow } from '@/components/EpisodeRow';
 import { playEpisode, showActions } from '@/components/libraryActions';
+import { openOnline } from '@/components/openOnline';
 import { Poster } from '@/components/Poster';
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
+import { siteForUrl } from '@/lib/catalog/sites';
 import { formatBytes } from '@/lib/format';
-import { useEpisodes } from '@/lib/hooks';
-import { isNew, showSummaries } from '@/lib/library';
+import { useEpisodes, useFollows } from '@/lib/hooks';
+import { isNew, seriesKey, showSummaries } from '@/lib/library';
 import { onSeriesRenamed } from '@/lib/library-edit';
 
 /** One series, like a folder: play where you left off, or pick an episode; each season collapses. */
@@ -19,6 +21,7 @@ export default function ShowScreen() {
   const episodes = useEpisodes();
   const show = useMemo(() => showSummaries(episodes).find((s) => s.key === key) ?? null, [episodes, key]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const follows = useFollows();
 
   // Renamed or merged from this page: follow it to its new name.
   useEffect(() => onSeriesRenamed((from, to) => from === key && router.setParams({ key: to })), [key]);
@@ -36,6 +39,10 @@ export default function ShowScreen() {
     if (router.canGoBack()) router.back();
   };
   const multi = show.seasons.length > 1;
+  // The show's page on its site, reached through the newest downloaded episode's page.
+  const onlineSource = [...show.episodes].reverse().find((e) => e.pageUrl && siteForUrl(e.pageUrl));
+  const online = onlineSource?.pageUrl ? { page: onlineSource.pageUrl, site: siteForUrl(onlineSource.pageUrl)!.name } : null;
+  const following = follows.some((f) => seriesKey(f.show) === show.key);
   const sections = show.seasons.map((s) => ({
     key: s.show,
     title: s.season !== null ? `Season ${s.season}` : multi ? 'Other episodes' : '',
@@ -96,6 +103,16 @@ export default function ShowScreen() {
           ) : (
             <Text style={[styles.meta, { color: colors.muted, marginTop: 12 }]}>All watched.</Text>
           )}
+          {online ? (
+            <Pressable
+              onPress={() => openOnline(online.page, show.title)}
+              style={({ pressed }) => [styles.online, { backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
+              <Text style={{ fontWeight: '600' }}>
+                {following ? '✓ Following · ' : ''}More episodes on {online.site}
+              </Text>
+              <Text style={{ color: colors.muted, fontSize: 20 }}>›</Text>
+            </Pressable>
+          ) : null}
           <Text style={[styles.tip, { color: colors.muted }]}>Swipe an episode right to mark it watched, left to delete it.</Text>
         </View>
       }
@@ -133,6 +150,7 @@ const styles = StyleSheet.create({
   play: { marginTop: 14, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   playText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   tip: { fontSize: 12, marginTop: 10 },
+  online: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   sectionTitle: { fontSize: 17, fontWeight: '700' },
 });

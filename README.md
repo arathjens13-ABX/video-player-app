@@ -4,6 +4,8 @@ Download videos to your phone and watch them offline. It runs on iPhone and Andr
 
 ## What works now
 
+- **Discover tab:** search and browse AnimeXin-style sites (AnimeXin, Donghua Stream, Lucifer Donghua, AnimeKhor) natively: newest episodes, today's schedule, ongoing shows, and show pages listing every episode with one-tap download. **Follow** a show and new episodes download automatically, with a notification (background checks when iOS allows).
+
 - **Browser tab:** browse to an episode and press play. The app watches what the page's player loads (inside embedded players too, on iPhone) and lights up a **"⬇ N videos found"** button. Each find is checked first (length, quality, size), so ads and dead links are hidden.
 - **Servers:** on sites with a mirror picker (like animexin), the same button lists every server. Tapping one switches the page's player to it.
 - **Blocks ad redirects and pop-ups**, with an "Open anyway" button.

@@ -69,6 +69,23 @@ const MIGRATIONS: string[] = [
     url TEXT NOT NULL,
     file TEXT
   );`,
+  // Followed shows (lib/follows.ts): checked for new episodes, which download automatically.
+  `CREATE TABLE follows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL UNIQUE,
+    site TEXT NOT NULL,
+    title TEXT NOT NULL,
+    show TEXT NOT NULL,
+    cover TEXT,
+    server TEXT,
+    maxHeight INTEGER NOT NULL,
+    seen TEXT NOT NULL DEFAULT '[]',
+    autoDownload INTEGER NOT NULL DEFAULT 1,
+    createdAt INTEGER NOT NULL,
+    checkedAt INTEGER,
+    lastNewAt INTEGER,
+    lastError TEXT
+  );`,
 ];
 
 export const db = SQLite.openDatabaseSync('vidstash.db');

@@ -88,6 +88,27 @@ SideStore is ready. You won't need the PC again unless something goes badly wron
 
 ---
 
+## Discover: browse shows like a streaming app
+
+The **Discover** tab reads AnimeXin (and Donghua Stream, Lucifer Donghua, AnimeKhor — pick one at the top) directly, so you don't have to hunt through web pages.
+
+- **Search** any show by name.
+- **New episodes**: the site's latest releases. **Today**: what airs today (AnimeXin's schedule). **Ongoing**: every ongoing show; scroll for more.
+- Tap a show to open its page: poster, details, description, and **every episode** with what you already have: **▶ Play** (downloaded), **Downloading** / **Queued**, or **⬇ Download** (one tap, using your usual server).
+- **Download several…** on a show's page opens the same range picker as in the Browser.
+- Pull down to refresh.
+- In the Library, a show you downloaded from one of these sites has **More episodes on AnimeXin** on its page.
+
+## Following shows
+
+On a show's page in Discover, tap **+ Follow**.
+
+- VidStash checks followed shows for new episodes **when you open it**, **every 30 minutes while it's open**, and **in the background** when your iPhone allows it (iOS decides when; often a few times a day).
+- New episodes **download automatically** (up to 720p, on the server you last used on that site, never below 20 GB free). Turn this off per show on its page if you'd rather just be told.
+- You get a **notification** for new episodes (allow notifications when asked). Background checks can only *find* new episodes; the download itself starts the next time you open VidStash.
+- Following doesn't download episodes that are already out: use **Download several…** for those.
+- Followed shows are listed at the top of Discover; **Check now** checks right away.
+
 ## Downloading several episodes at once
 
 1. In the **Browser**, open a show's episode list (the season page), or any episode page that lists the other episodes.

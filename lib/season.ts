@@ -9,7 +9,7 @@ import { guessNames } from './links';
 /** Batch downloads never take the phone below this much free space. */
 export const KEEP_FREE_BYTES = 20e9;
 
-export type SeasonEpisode = ListedEpisode & { number: number | null; show: string; name: string };
+export type SeasonEpisode<T extends ListedEpisode = ListedEpisode> = T & { number: number | null; show: string; name: string };
 
 /** "32 [464]" -> 32 (the season's own count, not the running total in brackets). */
 export function listedNumber(num: string): number | null {
@@ -22,7 +22,7 @@ export function listedNumber(num: string): number | null {
  * the way a single download from the episode page would be, so they land in
  * the same show in the Library.
  */
-export function seasonEpisodes(list: ListedEpisode[]): SeasonEpisode[] {
+export function seasonEpisodes<T extends ListedEpisode>(list: T[]): SeasonEpisode<T>[] {
   const out = list.map((e) => {
     const names = guessNames(e.title);
     const fromTitle = names.title.match(/^Episode (\d+)$/);

@@ -27,6 +27,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="discover"
+        options={{
+          title: 'Discover',
+          tabBarIcon: ({ color }) => (
+            <TabIcon name={{ ios: 'sparkles.tv', android: 'explore', web: 'explore' }} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="browser"
         options={{
           title: 'Browser',
