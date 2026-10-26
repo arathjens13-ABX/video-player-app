@@ -93,3 +93,9 @@ test('flags SAMPLE-AES as unsupported', async () => {
   const info = await describeStream('https://x/a.m3u8', async () => drm);
   assert.equal(info.unsupportedEncryption, true);
 });
+
+test('absurd playlists are refused instead of freezing the app', () => {
+  const huge = '#EXTM3U\n' + Array.from({ length: 50_001 }, (_, i) => `#EXTINF:1,\ns${i}.ts`).join('\n');
+  assert.throws(() => parsePlaylist(huge, 'https://x.test/'), /too many pieces/);
+  assert.throws(() => parsePlaylist('#EXTM3U\n' + '#'.repeat(10_000_001), 'https://x.test/'), /too large/);
+});

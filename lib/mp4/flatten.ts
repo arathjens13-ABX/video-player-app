@@ -11,6 +11,9 @@
  */
 import { Writer, box, child, children, fourcc, fullBox, path, readBoxes, readI32, readU32, readU64, type Box } from './boxes';
 
+/** More samples than any real fragment has (about 4.5 hours of 60 fps video in one run). */
+const MAX_RUN_SAMPLES = 1_000_000;
+
 export interface OutputSink {
   /** Bytes written so far; the offset the next write lands at. */
   readonly position: number;
@@ -211,6 +214,12 @@ export class FlatMp4Writer {
         if (tf & 0x1) (dataPos = base + readI32(b, p)), (p += 4);
         let firstFlags: number | null = null;
         if (tf & 0x4) (firstFlags = readU32(b, p)), (p += 4);
+        // The sample count comes from the file: it must fit the table that follows (and the data,
+        // when sizes are defaults), or a corrupt count would loop billions of times.
+        const entryBytes = 4 * [0x100, 0x200, 0x400, 0x800].filter((bit) => tf & bit).length;
+        if (count > MAX_RUN_SAMPLES || p + count * entryBytes > trun.end || (!(tf & 0x200) && count * defSize > b.length)) {
+          throw new Error('Fragment is corrupt (sample table doesn’t fit)');
+        }
 
         const runStart = dataPos;
         let runBytes = 0;
@@ -415,7 +424,7 @@ function readEditList(b: Uint8Array, moov: Box, trak: Box): { mediaTime: number 
   if (!elst || !mvhd) return { mediaTime: null, delaySec: 0 };
   const movieTimescale = readU32(b, mvhd.dataStart + (b[mvhd.dataStart] === 1 ? 20 : 12)) || 1000;
   const v = b[elst.dataStart];
-  const count = readU32(b, elst.dataStart + 4);
+  const count = Math.min(readU32(b, elst.dataStart + 4), Math.floor((elst.end - elst.dataStart - 8) / (v === 1 ? 20 : 12)));
   let delay = 0;
   for (let i = 0; i < count; i++) {
     const o = elst.dataStart + 8 + i * (v === 1 ? 20 : 12);

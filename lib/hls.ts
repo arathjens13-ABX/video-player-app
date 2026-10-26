@@ -48,7 +48,13 @@ export function parseAttributes(s: string): Record<string, string> {
   return out;
 }
 
+/** Far beyond any real playlist; a server sending more is broken or hostile, and reading it would freeze the app. */
+export const MAX_PLAYLIST_CHARS = 10_000_000;
+/** About 27 hours of 2-second pieces. */
+export const MAX_SEGMENTS = 50_000;
+
 export function parsePlaylist(text: string, baseUrl: string): Playlist {
+  if (text.length > MAX_PLAYLIST_CHARS) throw new Error('Playlist is too large');
   const lines = text.replace(/\r/g, '').split('\n').map((l) => l.trim()).filter(Boolean);
   if (!lines[0]?.startsWith('#EXTM3U')) throw new Error('Not an HLS playlist');
 
@@ -110,6 +116,7 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
     } else if (line.startsWith('#EXT-X-ENDLIST')) {
       ended = true;
     } else if (!line.startsWith('#') && pendingDuration !== null) {
+      if (segments.length >= MAX_SEGMENTS) throw new Error('Playlist has too many pieces');
       segments.push({
         url: resolve(line, baseUrl),
         duration: pendingDuration,

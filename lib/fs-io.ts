@@ -2,6 +2,7 @@
 import { Directory, File, FileMode, Paths, type FileHandle } from 'expo-file-system';
 
 import type { FetchBytes, PartStore } from './hls-download';
+import { MAX_PLAYLIST_CHARS } from './hls';
 import { deadline, TimeoutError, untilAborted } from './http';
 import type { OutputSink } from './mp4/flatten';
 
@@ -85,6 +86,18 @@ export class FileSink implements OutputSink {
   }
 }
 
+/** Real pieces are a few MB; a server announcing more than this is broken or hostile. */
+const MAX_PIECE_BYTES = 512e6;
+
+/** Refuses a response whose announced size is beyond `max`, before reading it into memory. */
+function tooLarge(res: Response, max: number, what: string) {
+  const length = Number(res.headers.get('content-length'));
+  if (Number.isFinite(length) && length > max) {
+    res.body?.cancel?.().catch(() => {});
+    throw new Error(`${what} is unexpectedly large (${Math.round(length / 1e6)} MB)`);
+  }
+}
+
 /** A piece that sends nothing for this long is retried rather than waited on forever. */
 const PIECE_TIMEOUT_MS = 60_000;
 
@@ -95,6 +108,7 @@ export const fetchBytes: FetchBytes = async (url, headers, signal) => {
       (async () => {
         const res = await fetch(url, { headers, signal: limit.signal });
         if (!res.ok) throw new Error(`The server answered ${res.status}`);
+        tooLarge(res, MAX_PIECE_BYTES, 'A piece of the stream');
         // A host that ignores Range would send the whole file for every piece.
         if (headers.Range && res.status !== 206) {
           res.body?.cancel?.().catch(() => {});
@@ -118,6 +132,7 @@ export function fetchText(headers: Record<string, string>, signal?: AbortSignal)
       (async () => {
         const res = await fetch(url, { headers, signal });
         if (!res.ok) throw new Error(`The server answered ${res.status}`);
+        tooLarge(res, MAX_PLAYLIST_CHARS, 'The playlist');
         return { text: await res.text(), url: res.url || url };
       })(),
       signal

@@ -1,0 +1,51 @@
+diff --git a/node_modules/mux.js/cjs/codecs/adts.js b/node_modules/mux.js/cjs/codecs/adts.js
+index 2711893..3d15b7b 100644
+--- a/node_modules/mux.js/cjs/codecs/adts.js
++++ b/node_modules/mux.js/cjs/codecs/adts.js
+@@ -94,6 +94,12 @@ _AdtsStream = function AdtsStream(handlePartialSegments) {
+       // NOTE: frame length includes the size of the header
+ 
+       frameLength = (buffer[i + 3] & 0x03) << 11 | buffer[i + 4] << 3 | (buffer[i + 5] & 0xe0) >> 5;
++      // A frame can't be shorter than its own header: a corrupt length would never advance (VidStash patch).
++      if (frameLength < 7 + protectionSkipBytes) {
++        i++;
++        continue;
++      }
++
+       sampleCount = ((buffer[i + 6] & 0x03) + 1) * 1024;
+       adtsFrameDuration = sampleCount * ONE_SECOND_IN_TS / ADTS_SAMPLING_FREQUENCIES[(buffer[i + 2] & 0x3c) >>> 2]; // If we don't have enough data to actually finish this ADTS frame,
+       // then we have to wait for more data
+diff --git a/node_modules/mux.js/es/codecs/adts.js b/node_modules/mux.js/es/codecs/adts.js
+index 2711893..3d15b7b 100644
+--- a/node_modules/mux.js/es/codecs/adts.js
++++ b/node_modules/mux.js/es/codecs/adts.js
+@@ -94,6 +94,12 @@ _AdtsStream = function AdtsStream(handlePartialSegments) {
+       // NOTE: frame length includes the size of the header
+ 
+       frameLength = (buffer[i + 3] & 0x03) << 11 | buffer[i + 4] << 3 | (buffer[i + 5] & 0xe0) >> 5;
++      // A frame can't be shorter than its own header: a corrupt length would never advance (VidStash patch).
++      if (frameLength < 7 + protectionSkipBytes) {
++        i++;
++        continue;
++      }
++
+       sampleCount = ((buffer[i + 6] & 0x03) + 1) * 1024;
+       adtsFrameDuration = sampleCount * ONE_SECOND_IN_TS / ADTS_SAMPLING_FREQUENCIES[(buffer[i + 2] & 0x3c) >>> 2]; // If we don't have enough data to actually finish this ADTS frame,
+       // then we have to wait for more data
+diff --git a/node_modules/mux.js/lib/codecs/adts.js b/node_modules/mux.js/lib/codecs/adts.js
+index 4ba8678..8e83ff6 100644
+--- a/node_modules/mux.js/lib/codecs/adts.js
++++ b/node_modules/mux.js/lib/codecs/adts.js
+@@ -114,6 +114,12 @@ AdtsStream = function(handlePartialSegments) {
+         (buffer[i + 4] << 3) |
+         ((buffer[i + 5] & 0xe0) >> 5);
+ 
++      // A frame can't be shorter than its own header: a corrupt length would never advance (VidStash patch).
++      if (frameLength < 7 + protectionSkipBytes) {
++        i++;
++        continue;
++      }
++
+       sampleCount = ((buffer[i + 6] & 0x03) + 1) * 1024;
+       adtsFrameDuration = (sampleCount * ONE_SECOND_IN_TS) /
+         ADTS_SAMPLING_FREQUENCIES[(buffer[i + 2] & 0x3c) >>> 2];

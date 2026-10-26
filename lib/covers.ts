@@ -39,6 +39,7 @@ async function saveCover(key: string, url: string, referer?: string | null) {
   if (!res.ok) throw new Error(`The server answered ${res.status}`);
   const type = res.headers.get('content-type') ?? '';
   if (!type.startsWith('image/')) throw new Error(`Not an image (${type || 'unknown type'})`);
+  if (Number(res.headers.get('content-length')) > MAX_BYTES) throw new Error('Image is too large');
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (bytes.length === 0 || bytes.length > MAX_BYTES) throw new Error(`Unexpected size (${bytes.length} bytes)`);
   coversDir.create({ idempotent: true, intermediates: true });

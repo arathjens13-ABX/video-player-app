@@ -39,6 +39,7 @@
     "@types/react": "~19.2.2",
     "eslint": "^9.39.5",
     "eslint-config-expo": "^57.0.2",
+    "patch-package": "^8.0.1",
     "playwright": "^1.56.1",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3"
@@ -50,7 +51,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "postinstall": "patch-package"
   },
   "private": true
 }

@@ -33,3 +33,36 @@ test('ignores anything else a page might post', () => {
   const r = parseDetectorMessage(JSON.stringify({ type: 'servers', servers: [null, { url: 'https://s/1', label: 'One' }, { label: 'no url' }] }));
   assert.deepEqual(r, { type: 'servers', servers: [{ url: 'https://s/1', label: 'One' }] });
 });
+
+test('pages can only hand over web links, and episodes only from the list’s own site', () => {
+  for (const url of ['file:///var/mobile/x.mp4', 'javascript:alert(1)', 'vidstash://open?url=x', 'data:video/mp4;base64,AA']) {
+    assert.equal(parseDetectorMessage(JSON.stringify({ type: 'media', url, kind: 'file', frame: 'https://p/' })), null, url);
+  }
+  const servers = parseDetectorMessage(
+    JSON.stringify({ type: 'servers', servers: [{ label: 'ok', url: 'https://a.test/e' }, { label: 'bad', url: 'file:///etc/hosts' }] })
+  );
+  assert.deepEqual(servers, { type: 'servers', servers: [{ label: 'ok', url: 'https://a.test/e' }] });
+  const eps = parseDetectorMessage(
+    JSON.stringify({
+      type: 'episodes',
+      series: 'S',
+      listUrl: 'https://animexin.dev/show/',
+      episodes: [
+        { url: 'https://animexin.dev/show-episode-1/', num: '1', title: 'E1' },
+        { url: 'https://www.animexin.dev/show-episode-2/', num: '2', title: 'E2' },
+        { url: 'https://evil.test/x/', num: '3', title: 'E3' },
+        { url: 'file:///private/var/x', num: '4', title: 'E4' },
+      ],
+    })
+  );
+  assert.deepEqual(
+    eps && eps.type === 'episodes' ? eps.episodes.map((e) => e.num) : null,
+    ['1', '2']
+  );
+  assert.equal(parseDetectorMessage(JSON.stringify({ type: 'episodes', listUrl: 'file:///x', episodes: [] })), null);
+  // A flood of entries is capped.
+  const many = parseDetectorMessage(
+    JSON.stringify({ type: 'servers', servers: Array.from({ length: 5000 }, (_, i) => ({ label: 'x'.repeat(10000), url: `https://a.test/${i}` })) })
+  );
+  assert.ok(many && many.type === 'servers' && many.servers.length === 100 && many.servers[0].label.length === 200);
+});

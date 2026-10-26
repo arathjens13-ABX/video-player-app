@@ -1,5 +1,5 @@
 import { formatBytes } from './format';
-import { describeStream, type StreamInfo } from './hls';
+import { describeStream, MAX_PLAYLIST_CHARS, type StreamInfo } from './hls';
 import { requestHeaders, withTimeout } from './http';
 import { URL } from './url';
 
@@ -31,6 +31,10 @@ export async function probe(c: Candidate, userAgent: string): Promise<ProbeResul
         withTimeout(10000, async (signal) => {
           const res = await fetch(url, { headers, signal });
           if (!res.ok) throw new Error(`The server answered ${res.status}`);
+          if (Number(res.headers.get('content-length')) > MAX_PLAYLIST_CHARS) {
+            res.body?.cancel?.().catch(() => {});
+            throw new Error('Playlist is too large');
+          }
           return { text: await res.text(), url: res.url || url };
         })
       );
