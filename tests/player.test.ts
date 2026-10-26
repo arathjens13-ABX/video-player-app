@@ -27,7 +27,9 @@ test('skips stay inside the video', () => {
 
 test('skip intro shows only early in a full episode', () => {
   assert.ok(offerSkipIntro(10, 960));
+  assert.ok(offerSkipIntro(100, 960)); // after a recap, the opening can start later
   assert.ok(!offerSkipIntro(1, 960));
-  assert.ok(!offerSkipIntro(300, 960));
+  assert.ok(!offerSkipIntro(301, 960));
+  assert.ok(!offerSkipIntro(100, 960, true)); // used once: gone for the rest of the episode
   assert.ok(!offerSkipIntro(10, 120)); // a short clip
 });

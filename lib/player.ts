@@ -26,9 +26,16 @@ export function skipTarget(current: number, by: number, duration: number): numbe
   return Math.min(end, Math.max(0, current + by));
 }
 
-export const INTRO_SKIP_SEC = 90;
+/** Choices offered by long-pressing Skip intro; remembered per series. */
+export const INTRO_SKIP_CHOICES = [60, 75, 90, 105, 120] as const;
 
-/** Openings come in the first few minutes; the button stays out of the way after that. */
-export function offerSkipIntro(current: number, duration: number): boolean {
-  return duration > 300 && current >= 3 && current < 240;
+/** Openings start within this long (some episodes open with a recap first). */
+const INTRO_WINDOW_SEC = 300;
+
+/**
+ * Skip intro shows in the first minutes of a full episode (tapping skips one
+ * intro's length from wherever you are), and not again once used.
+ */
+export function offerSkipIntro(current: number, duration: number, used = false): boolean {
+  return !used && duration > INTRO_WINDOW_SEC && current >= 3 && current < INTRO_WINDOW_SEC;
 }

@@ -2,11 +2,11 @@ import { useEvent } from 'expo';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { VideoAirPlayButton, type VideoPlayer } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDuration } from '@/lib/format';
-import { INTRO_SKIP_SEC, nextRate, offerSkipIntro, rateLabel, skipTarget, tapZone } from '@/lib/player';
+import { INTRO_SKIP_CHOICES, nextRate, offerSkipIntro, rateLabel, skipTarget, tapZone } from '@/lib/player';
 
 const HIDE_AFTER_MS = 3500;
 const DOUBLE_TAP_MS = 280;
@@ -21,6 +21,9 @@ type Props = {
   duration: number;
   landscape: boolean;
   onToggleRotate: () => void;
+  /** How far Skip intro jumps for this series, and a way to change it (remembered per series). */
+  introSec: number;
+  onSetIntroSec: (seconds: number) => void;
   onPictureInPicture: () => void;
   onClose: () => void;
 };
@@ -66,6 +69,7 @@ export function PlayerControls(p: Props) {
   const [width, setWidth] = useState(0);
   const [flash, setFlash] = useState<{ zone: 'back' | 'forward'; total: number; key: number } | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
+  const [introUsed, setIntroUsed] = useState(false);
   const lastTap = useRef<{ at: number; zone: string } | null>(null);
   const singleTap = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -190,9 +194,24 @@ export function PlayerControls(p: Props) {
           <View
             style={[styles.bottom, { paddingBottom: insets.bottom + 10, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }]}
             pointerEvents="box-none">
-            {offerSkipIntro(p.currentTime, duration) ? (
-              <Pressable onPress={() => skip(INTRO_SKIP_SEC)} style={styles.skipIntro} hitSlop={6}>
-                <Text style={styles.skipIntroText}>Skip intro ›</Text>
+            {offerSkipIntro(p.currentTime, duration, introUsed) ? (
+              <Pressable
+                onPress={() => {
+                  setIntroUsed(true);
+                  skip(p.introSec);
+                }}
+                onLongPress={() =>
+                  Alert.alert('Skip intro length', 'How long this show’s opening is. Remembered for this series.', [
+                    ...INTRO_SKIP_CHOICES.map((sec) => ({
+                      text: `${sec} seconds${sec === p.introSec ? ' ✓' : ''}`,
+                      onPress: () => p.onSetIntroSec(sec),
+                    })),
+                    { text: 'Cancel', style: 'cancel' as const },
+                  ])
+                }
+                style={styles.skipIntro}
+                hitSlop={6}>
+                <Text style={styles.skipIntroText}>Skip intro ({p.introSec} s) ›</Text>
               </Pressable>
             ) : null}
             <View style={styles.timeRow} pointerEvents="box-none">

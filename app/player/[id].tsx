@@ -9,9 +9,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { PlayerControls } from '@/components/PlayerControls';
 import { getEpisode, listEpisodes, notify, updateEpisode, type Episode } from '@/lib/db';
 import { videoFile } from '@/lib/downloads';
-import { nextEpisode } from '@/lib/library';
+import { nextEpisode, seriesKey } from '@/lib/library';
 import { logError, logInfo, logWarn } from '@/lib/log';
-import { getStartLandscape } from '@/lib/settings';
+import { getIntroSkip, getStartLandscape, setIntroSkip } from '@/lib/settings';
 
 function playEpisode(id: number) {
   router.replace({ pathname: '/player/[id]', params: { id } });
@@ -47,6 +47,8 @@ function Player({ episodeId }: { episodeId: number }) {
   });
 
   const videoView = useRef<VideoView>(null);
+  const series = episode ? seriesKey(episode.show) : '';
+  const [introSec, setIntroSec] = useState(() => getIntroSkip(series));
   const [time, setTime] = useState({ current: episode?.positionSec ?? 0, duration: episode?.durationSec ?? 0 });
 
   // Sideways on open (if chosen in Settings), even with the phone's rotation lock on; upright again on close.
@@ -172,6 +174,11 @@ function Player({ episodeId }: { episodeId: number }) {
             duration={time.duration}
             landscape={landscape}
             onToggleRotate={() => setLandscape((l) => !l)}
+            introSec={introSec}
+            onSetIntroSec={(sec) => {
+              setIntroSec(sec);
+              setIntroSkip(series, sec);
+            }}
             onPictureInPicture={() => {
               videoView.current?.startPictureInPicture().catch((e: unknown) => logWarn('player', 'picture in picture failed:', e));
             }}

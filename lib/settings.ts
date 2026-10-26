@@ -93,3 +93,23 @@ export function setLibrarySort(sort: 'recent' | 'az' | 'added') {
     // Not remembered; the default comes back next launch.
   }
 }
+
+const INTRO_KEY = 'settings.introSkip.';
+
+/** How far Skip intro jumps for a series (seconds); 90 unless changed with a long-press. */
+export function getIntroSkip(seriesKey: string): number {
+  try {
+    const v = Number(Storage.getItemSync(INTRO_KEY + seriesKey));
+    return v >= 10 && v <= 600 ? v : 90;
+  } catch {
+    return 90;
+  }
+}
+
+export function setIntroSkip(seriesKey: string, seconds: number) {
+  try {
+    Storage.setItemSync(INTRO_KEY + seriesKey, String(seconds));
+  } catch {
+    // Back to the default next time.
+  }
+}

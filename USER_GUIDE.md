@@ -115,7 +115,7 @@ How it works and what to expect:
 - Episodes play **sideways and full screen**, even with your rotation lock on (turn this off in Settings → Player). The next episode starts automatically when one finishes (5-second countdown, with Cancel).
 - In the player, tap the video to show the controls:
   - **Double-tap** the left or right side to skip back or forward 10 seconds; keep tapping to skip more.
-  - **Skip intro** (first few minutes) jumps ahead 90 seconds.
+  - **Skip intro** (first 5 minutes) jumps ahead by one intro's length (90 seconds unless changed) and then goes away for that episode. **Long-press** it to set this show's intro length (60–120 seconds); it's remembered for the whole series.
   - Top bar: **speed** (1× → 1.25× → 1.5× → 2× → 0.75×), **AirPlay**, **Picture in Picture**, and **rotate** (sideways ↔ upright).
   - Drag along the bar at the bottom to jump anywhere.
 - Your videos also appear in the **Files** app under *On My iPhone › VidStash*.
