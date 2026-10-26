@@ -33,6 +33,8 @@ export default function BrowserScreen() {
   const [address, setAddress] = useState('');
   const [editing, setEditing] = useState(false);
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false, loading: false, url: '', title: '' });
+  // The show's poster on the current page, if the page has one (saved for the Library on download).
+  const [cover, setCover] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [servers, setServers] = useState<Server[]>([]);
   const [season, setSeason] = useState<{ listUrl: string; episodes: ListedEpisode[] } | null>(null);
@@ -121,6 +123,7 @@ export default function BrowserScreen() {
       if (msg.episodes.length >= 2) setSeason({ listUrl: msg.listUrl, episodes: msg.episodes });
     } else if (msg.type === 'page') {
       setNav((n) => (n.title === msg.title ? n : { ...n, title: msg.title }));
+      setCover(msg.cover);
     }
   }
 
@@ -135,6 +138,7 @@ export default function BrowserScreen() {
       setCandidates([]);
       setServers([]);
       setSeason(null);
+      setCover(null);
     }
     setNav((n) => ({ ...n, loading: true }));
   }
@@ -193,6 +197,7 @@ export default function BrowserScreen() {
         referer: c.frame,
         pageTitle: nav.title,
         pageUrl: nav.url,
+        ...(cover ? { cover } : {}),
       },
     });
   }
@@ -209,7 +214,7 @@ export default function BrowserScreen() {
   function downloadSeason() {
     if (!season || !currentUrl.current) return;
     setSheetOpen(false);
-    setSeasonDraft({ ...season, server: preferredServer(siteOf(currentUrl.current)) });
+    setSeasonDraft({ ...season, cover, server: preferredServer(siteOf(currentUrl.current)) });
     router.push('/batch');
   }
 

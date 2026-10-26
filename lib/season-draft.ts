@@ -11,6 +11,8 @@ export type SeasonDraft = {
   episodes: ListedEpisode[];
   /** The server the user last switched to on this site, by its label in the mirror picker. */
   server: string | null;
+  /** The show's poster on the page, for the Library. */
+  cover: string | null;
 };
 
 let draft: SeasonDraft | null = null;

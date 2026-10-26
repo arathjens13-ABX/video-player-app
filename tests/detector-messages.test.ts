@@ -12,7 +12,16 @@ test('accepts well-formed detector messages', () => {
     via: 'xhr',
     frame: 'https://p/',
   });
-  assert.deepEqual(parseDetectorMessage(JSON.stringify({ type: 'page', title: '', url: 'https://p/' })), { type: 'page', title: '', url: 'https://p/' });
+  assert.deepEqual(parseDetectorMessage(JSON.stringify({ type: 'page', title: '', url: 'https://p/' })), { type: 'page', title: '', url: 'https://p/', cover: null });
+  assert.equal(
+    (parseDetectorMessage(JSON.stringify({ type: 'page', title: 't', url: 'https://p/', cover: 'https://p/poster.jpg' })) as { cover: string }).cover,
+    'https://p/poster.jpg'
+  );
+  // Only web images: a page can post anything.
+  assert.equal(
+    (parseDetectorMessage(JSON.stringify({ type: 'page', title: 't', url: 'https://p/', cover: 'file:///etc/passwd' })) as { cover: string | null }).cover,
+    null
+  );
 });
 
 test('ignores anything else a page might post', () => {

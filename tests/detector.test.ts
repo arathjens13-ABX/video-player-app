@@ -16,7 +16,13 @@ type Msg = {
   series?: string;
   listUrl?: string;
   episodes?: { url: string; num: string; title: string }[];
-  url?: string; kind?: string; via?: string; servers?: { label: string; url: string }[]; title?: string };
+  url?: string;
+  kind?: string;
+  via?: string;
+  servers?: { label: string; url: string }[];
+  title?: string;
+  cover?: string | null;
+};
 
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64');
 
@@ -56,7 +62,8 @@ const EMBED = `<!doctype html><html><body>
 
 // Season page (animestream theme), as on animexin.dev, newest first.
 const SERIES = `<!doctype html><html><head><title>Soul Land 2 - AnimeXin</title></head><body>
-<div class="infox"><h1 class="entry-title">Soul Land 2:  The Peerless Tang Sect</h1></div>
+<div class="bigcontent"><div class="thumb" itemprop="image"><img src="/wp-content/uploads/soul-land-2.jpg" width="404" height="548"></div>
+<div class="infox"><h1 class="entry-title">Soul Land 2:  The Peerless Tang Sect</h1></div></div>
 <div class="eplister"><ul>
   <li data-index="0"><a href="https://site.test/soul-land-2-episode-62/"><div class="epl-num">62 [111]</div>
     <div class="epl-title">Soul Land 2 Episode 62 [111] Subtitle</div><div class="epl-date">October 19, 2026</div></a></li>
@@ -215,6 +222,7 @@ test('reads a season page’s episode list', async () => {
   const list = msgs.filter((m) => m.type === 'episodes').pop();
   assert.equal(list?.series, 'Soul Land 2: The Peerless Tang Sect');
   assert.equal(list?.listUrl, 'https://series.test/soul-land-2/');
+  assert.equal(msgs.filter((m) => m.type === 'page').pop()?.cover, 'https://series.test/wp-content/uploads/soul-land-2.jpg');
   assert.deepEqual(list?.episodes, [
     { url: 'https://site.test/soul-land-2-episode-62/', num: '62 [111]', title: 'Soul Land 2 Episode 62 [111] Subtitle' },
     { url: 'https://series.test/soul-land-2-episode-61/', num: '61', title: 'Soul Land 2 Episode 61 Subtitle' },
@@ -226,6 +234,7 @@ test('an episode page points to its season’s episode list', async () => {
   const { page, msgs } = await openSite();
   const list = msgs.filter((m) => m.type === 'episodes').pop();
   assert.equal(list?.listUrl, 'https://series.test/soul-land-2/');
+  assert.equal(msgs.filter((m) => m.type === 'page').pop()?.cover, null);
   assert.deepEqual(list?.episodes, []);
   await page.context().close();
 });

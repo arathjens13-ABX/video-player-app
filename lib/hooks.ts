@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { getEpisode, listEpisodes, subscribe, type Episode } from './db';
 import { batchNote, isBatchPaused, listBatch } from './batch';
+import { coverFor } from './covers';
 import { getProgress, subscribeProgress, type Progress } from './downloads';
 
 export function useEpisodes(): Episode[] {
@@ -32,4 +33,16 @@ export function useBatch() {
   const [state, setState] = useState(read);
   useEffect(() => subscribe(() => setState(read())), []);
   return state;
+}
+
+/** The saved poster for a series (its latest season's first), kept current as posters download. */
+export function useCover(shows: string[]) {
+  const key = shows.join('\n');
+  const [uri, setUri] = useState(() => coverFor(shows));
+  useEffect(() => {
+    const names = key.split('\n');
+    setUri(coverFor(names));
+    return subscribe(() => setUri(coverFor(names)));
+  }, [key]);
+  return uri;
 }

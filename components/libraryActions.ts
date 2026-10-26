@@ -29,11 +29,14 @@ export function episodeActions(e: Episode) {
   ]);
 }
 
-/** The ••• menu for a whole show. `onDeletedAll` runs after the show is gone (e.g. to leave its page). */
-export function showActions(show: string, list: Episode[], onDeletedAll?: () => void) {
+/** The ••• menu for a whole series. `onDeletedAll` runs after it's gone (e.g. to leave its page). */
+export function showActions(show: string, list: Episode[], onDeletedAll?: () => void, seriesKey?: string) {
   const unwatched = list.filter((e) => !e.watched).length;
   const watched = list.length - unwatched;
   Alert.alert(show, `${list.length} downloaded episode${list.length === 1 ? '' : 's'}`, [
+    ...(seriesKey
+      ? [{ text: 'Rename or merge…', onPress: () => router.push({ pathname: '/rename-show', params: { key: seriesKey } }) }]
+      : []),
     {
       text: unwatched > 0 ? 'Mark all as watched' : 'Mark all as unwatched',
       onPress: () => batch(() => list.forEach((e) => updateEpisode(e.id, { watched: unwatched > 0 ? 1 : 0, positionSec: 0 }))),
@@ -59,7 +62,7 @@ export function showActions(show: string, list: Episode[], onDeletedAll?: () => 
         ]
       : []),
     {
-      text: 'Delete whole show',
+      text: 'Delete whole series',
       style: 'destructive',
       onPress: () =>
         Alert.alert(`Delete all of ${show}?`, `${list.length} video${list.length === 1 ? '' : 's'} will be removed from your phone.`, [

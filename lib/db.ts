@@ -63,6 +63,12 @@ const MIGRATIONS: string[] = [
     createdAt INTEGER NOT NULL
   );`,
   `ALTER TABLE episodes ADD COLUMN lastPlayedAt INTEGER;`,
+  // Show posters from the sites (lib/covers.ts), per show name (season).
+  `CREATE TABLE show_covers (
+    key TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    file TEXT
+  );`,
 ];
 
 export const db = SQLite.openDatabaseSync('vidstash.db');

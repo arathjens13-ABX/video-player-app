@@ -8,7 +8,7 @@ export type ListedEpisode = { url: string; num: string; title: string };
 export type DetectorMessage =
   | { type: 'media'; url: string; kind: 'hls' | 'file'; via: string; frame: string }
   | { type: 'servers'; servers: Server[] }
-  | { type: 'page'; title: string; url: string }
+  | { type: 'page'; title: string; url: string; cover: string | null }
   /** A season page's episodes, or (on an episode page) just where that list is. */
   | { type: 'episodes'; series: string; listUrl: string; episodes: ListedEpisode[] };
 
@@ -40,7 +40,10 @@ export function parseDetectorMessage(data: string): DetectorMessage | null {
     );
     return { type: 'episodes', series: typeof o.series === 'string' ? o.series : '', listUrl: o.listUrl, episodes };
   }
-  if (o.type === 'page' && typeof o.title === 'string' && isString(o.url)) return { type: 'page', title: o.title, url: o.url };
+  if (o.type === 'page' && typeof o.title === 'string' && isString(o.url)) {
+    const cover = isString(o.cover) && /^https?:\/\//i.test(o.cover) ? o.cover : null;
+    return { type: 'page', title: o.title, url: o.url, cover };
+  }
   return null;
 }
 

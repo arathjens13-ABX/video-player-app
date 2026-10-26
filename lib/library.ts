@@ -36,39 +36,100 @@ export function groupByShow<T extends Pick<Episode, 'show' | 'title' | 'createdA
     .map((g) => ({ title: g.title, data: g.data.sort(compareEpisodes) }));
 }
 
-/** The downloaded episode that comes after `current` in its show, if there is one. */
+const ORDINALS: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10 };
+
+/**
+ * Splits a show name into its series and season: "Tales Of Demons And Gods
+ * Season 10" -> { series: "Tales Of Demons And Gods", season: 10 }. Names
+ * without a season marker are the whole series ("Soul Land 2" is a sequel's
+ * name, not a season).
+ */
+export function seriesOf(show: string): { series: string; season: number | null } {
+  const name = show.trim().replace(/\s+/g, ' ');
+  const patterns: [RegExp, (m: RegExpMatchArray) => number | undefined][] = [
+    [/^(.*?)[\s:,(-]*\bseason\s*(\d+)\b\)?(.*)$/i, (m) => Number(m[2])],
+    [/^(.*?)[\s:,(-]*\b(\d+)(?:st|nd|rd|th)\s+season\b\)?(.*)$/i, (m) => Number(m[2])],
+    [/^(.*?)[\s:,(-]*\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+season\b\)?(.*)$/i, (m) => ORDINALS[m[2].toLowerCase()]],
+    [/^(.*?)[\s:,(-]*\bs(\d{1,2})\b\)?(.*)$/i, (m) => Number(m[2])],
+  ];
+  for (const [re, num] of patterns) {
+    const m = name.match(re);
+    const season = m ? num(m) : undefined;
+    if (m && season !== undefined && m[1].trim()) {
+      const series = `${m[1]} ${m[3]}`.replace(/[\s:,(-]+$/, '').replace(/\s+/g, ' ').trim();
+      return { series, season };
+    }
+  }
+  return { series: name, season: null };
+}
+
+export function seriesKey(show: string) {
+  return showKey(seriesOf(show).series);
+}
+
+export type Season<T> = { show: string; season: number | null; episodes: T[] };
+export type Series<T> = { key: string; title: string; seasons: Season<T>[]; episodes: T[] };
+
+/** Shows grouped into series, seasons in order (unnumbered first), episodes in watching order across seasons. */
+export function groupBySeries<T extends Pick<Episode, 'show' | 'title' | 'createdAt' | 'status'>>(episodes: T[]): Series<T>[] {
+  const bySeries = new Map<string, { title: string; shows: { title: string; data: T[] }[] }>();
+  for (const show of groupByShow(episodes)) {
+    const { series } = seriesOf(show.title);
+    const key = showKey(series);
+    const entry = bySeries.get(key) ?? { title: series, shows: [] };
+    entry.shows.push(show);
+    bySeries.set(key, entry);
+  }
+  return [...bySeries.entries()]
+    .map(([key, { title, shows }]) => {
+      const seasons = shows
+        .map((s) => ({ show: s.title, season: seriesOf(s.title).season, episodes: s.data }))
+        .sort((a, b) => (a.season ?? 0) - (b.season ?? 0));
+      return { key, title, seasons, episodes: seasons.flatMap((s) => s.episodes) };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+}
+
+/** The downloaded episode that comes after `current`, carrying on into the next season. */
 export function nextEpisode<T extends Pick<Episode, 'id' | 'show' | 'title' | 'createdAt' | 'status'>>(
   episodes: T[],
   current: T
 ): T | null {
-  const show = groupByShow(episodes).find((g) => showKey(g.title) === showKey(current.show));
-  if (!show) return null;
-  const i = show.data.findIndex((e) => e.id === current.id);
-  return i >= 0 && i + 1 < show.data.length ? show.data[i + 1] : null;
+  const series = groupBySeries(episodes).find((g) => g.key === seriesKey(current.show));
+  if (!series) return null;
+  const i = series.episodes.findIndex((e) => e.id === current.id);
+  return i >= 0 && i + 1 < series.episodes.length ? series.episodes[i + 1] : null;
 }
 
 type Playable = Pick<Episode, 'id' | 'show' | 'title' | 'createdAt' | 'status' | 'positionSec' | 'watched' | 'lastPlayedAt'>;
 
+/** Where to pick a series back up: the episode stopped partway through, or the next unwatched one. */
+function pickUp<T extends Playable>(ordered: T[]): { next: T | null; resume: boolean; last: T | null } {
+  const played = ordered.filter((e) => e.lastPlayedAt);
+  const last = played.length ? played.reduce((a, b) => ((b.lastPlayedAt ?? 0) > (a.lastPlayedAt ?? 0) ? b : a)) : null;
+  if (last && last.positionSec > 0 && !last.watched) return { next: last, resume: true, last };
+  const from = last ? ordered.indexOf(last) + 1 : 0;
+  const next = ordered.slice(from).find((e) => !e.watched) ?? (last ? null : (ordered.find((e) => !e.watched) ?? null));
+  return { next, resume: !!next && next.positionSec > 0, last };
+}
+
 /**
- * One episode per show you've been watching, most recently played first: the
+ * One episode per series you've been watching, most recently played first: the
  * one you stopped partway through, or else the next one after the last you
- * played. Shows you're caught up on (or never started) don't appear.
+ * played. Series you're caught up on (or never started) don't appear.
  */
 export function continueWatching<T extends Playable>(episodes: T[]): { episode: T; resume: boolean }[] {
   const out: { episode: T; resume: boolean; at: number }[] = [];
-  for (const show of groupByShow(episodes)) {
-    const played = show.data.filter((e) => e.lastPlayedAt);
-    if (played.length === 0) continue;
-    const last = played.reduce((a, b) => ((b.lastPlayedAt ?? 0) > (a.lastPlayedAt ?? 0) ? b : a));
-    const at = last.lastPlayedAt ?? 0;
-    if (last.positionSec > 0 && !last.watched) {
-      out.push({ episode: last, resume: true, at });
-      continue;
-    }
-    const next = show.data.slice(show.data.indexOf(last) + 1).find((e) => !e.watched);
-    if (next) out.push({ episode: next, resume: next.positionSec > 0, at });
+  for (const series of groupBySeries(episodes)) {
+    const { next, resume, last } = pickUp(series.episodes);
+    if (last && next) out.push({ episode: next, resume, at: last.lastPlayedAt ?? 0 });
   }
   return out.sort((a, b) => b.at - a.at).map(({ episode, resume }) => ({ episode, resume }));
+}
+
+/** Downloaded but never opened. */
+export function isNew(e: Pick<Episode, 'status' | 'watched' | 'lastPlayedAt' | 'positionSec'>): boolean {
+  return e.status === 'done' && !e.watched && !e.lastPlayedAt && e.positionSec === 0;
 }
 
 /** Space a show's downloaded episodes take on the phone. */
@@ -81,10 +142,13 @@ export type ShowSort = 'recent' | 'az' | 'added';
 export type ShowSummary<T> = {
   key: string;
   title: string;
+  seasons: Season<T>[];
+  /** Every episode, in watching order across seasons. */
   episodes: T[];
   unwatched: number;
+  fresh: number;
   bytes: number;
-  /** What tapping "play" on the show starts: where you stopped, or the next unwatched episode. */
+  /** What tapping "play" starts: where you stopped, or the next unwatched episode. */
   next: T | null;
   resume: boolean;
   lastPlayedAt: number;
@@ -93,44 +157,43 @@ export type ShowSummary<T> = {
 
 type Summarizable = Playable & Pick<Episode, 'bytesWritten'>;
 
-/** One entry per show for the Library's show list. */
+/** One entry per series for the Library's list. */
 export function showSummaries<T extends Summarizable>(episodes: T[]): ShowSummary<T>[] {
-  return groupByShow(episodes).map((g) => {
-    const played = g.data.filter((e) => e.lastPlayedAt);
-    const last = played.length ? played.reduce((a, b) => ((b.lastPlayedAt ?? 0) > (a.lastPlayedAt ?? 0) ? b : a)) : null;
-    let next: T | null = null;
-    let resume = false;
-    if (last && last.positionSec > 0 && !last.watched) {
-      next = last;
-      resume = true;
-    } else {
-      // After the last one played; for a show never played, the first unwatched.
-      const from = last ? g.data.indexOf(last) + 1 : 0;
-      next = g.data.slice(from).find((e) => !e.watched) ?? g.data.find((e) => !e.watched) ?? null;
-      resume = !!next && next.positionSec > 0;
-    }
+  return groupBySeries(episodes).map((g) => {
+    const { next, resume, last } = pickUp(g.episodes);
     return {
-      key: showKey(g.title),
+      key: g.key,
       title: g.title,
-      episodes: g.data,
-      unwatched: g.data.filter((e) => !e.watched).length,
-      bytes: showBytes(g.data),
+      seasons: g.seasons,
+      episodes: g.episodes,
+      unwatched: g.episodes.filter((e) => !e.watched).length,
+      fresh: g.episodes.filter(isNew).length,
+      bytes: showBytes(g.episodes),
       next,
       resume,
       lastPlayedAt: last?.lastPlayedAt ?? 0,
-      lastAddedAt: Math.max(...g.data.map((e) => e.createdAt)),
+      lastAddedAt: Math.max(...g.episodes.map((e) => e.createdAt)),
     };
   });
 }
 
-/** Shows matching a search (every word, anywhere in the name), in the chosen order. */
+/** Series matching a search (every word, anywhere in the name or a season's name), in the chosen order. */
 export function findShows<T>(shows: ShowSummary<T>[], query: string, sort: ShowSort): ShowSummary<T>[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const matching = shows.filter((s) => words.every((w) => s.key.includes(w)));
+  const matching = shows.filter((s) => {
+    const text = [s.key, ...s.seasons.map((x) => x.show.toLowerCase())].join(' ');
+    return words.every((w) => text.includes(w));
+  });
   const byName = (a: ShowSummary<T>, b: ShowSummary<T>) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
   return [...matching].sort((a, b) => {
     if (sort === 'recent') return b.lastPlayedAt - a.lastPlayedAt || b.lastAddedAt - a.lastAddedAt || byName(a, b);
     if (sort === 'added') return b.lastAddedAt - a.lastAddedAt || byName(a, b);
     return byName(a, b);
   });
+}
+
+/** A season's show name after its series is renamed: "New Name Season 3", or just the name. */
+export function renamedShow(season: number | null, seriesName: string): string {
+  const name = seriesName.trim().replace(/\s+/g, ' ');
+  return season === null ? name : `${name} Season ${season}`;
 }

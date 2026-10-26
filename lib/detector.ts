@@ -224,6 +224,15 @@ export const DETECTOR_JS = String.raw`
     }
   }
 
+  // The show's poster, for the Library: the theme's cover image, else the page's share image.
+  function coverImage() {
+    var img = document.querySelector('.bigcontent .thumb img, .infox .thumb img, .thumb[itemprop="image"] img');
+    var meta = document.querySelector('meta[property="og:image"]');
+    var src = (img && (img.getAttribute('data-src') || img.getAttribute('src'))) || (meta && meta.getAttribute('content'));
+    var url = src && absolute(src);
+    return url && /^https?:/i.test(url) ? url : null;
+  }
+
   // Season pages list every episode (".eplister" in the animestream theme); episode pages
   // link to that list ("All Episodes"). Both feed "Download several".
   var lastEpisodes = '';
@@ -279,7 +288,7 @@ export const DETECTOR_JS = String.raw`
       if (isTop) {
         collectServers();
         collectEpisodes();
-        post({ type: 'page', title: document.title, url: location.href });
+        post({ type: 'page', title: document.title, url: location.href, cover: coverImage() });
       }
       var videos = document.querySelectorAll('video');
       for (var i = 0; i < videos.length; i++) checkMedia(videos[i]);

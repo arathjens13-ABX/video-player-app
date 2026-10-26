@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { DownloadStatus } from '../lib/db';
-import { continueWatching, episodeNumber, findShows, groupByShow, nextEpisode, showBytes, showSummaries } from '../lib/library';
+import { continueWatching, episodeNumber, findShows, groupBySeries, groupByShow, isNew, nextEpisode, renamedShow, seriesOf, showBytes, showSummaries } from '../lib/library';
 
 const ep = (id: number, show: string, title: string, createdAt = id, status: DownloadStatus = 'done') => ({ id, show, title, createdAt, status });
 
@@ -112,4 +112,47 @@ test('show list: next episode per show, search and sort', () => {
   assert.deepEqual(findShows(shows, 'land soul', 'az').map((s) => s.title), ['Soul Land 2']);
   assert.deepEqual(findShows(shows, 'HEAVENS', 'az').map((s) => s.title), ['Battle Through the Heavens']);
   assert.deepEqual(findShows(shows, 'zzz', 'az'), []);
+});
+
+test('season markers split a show name into series and season', () => {
+  assert.deepEqual(seriesOf('Tales Of Demons And Gods Season 10'), { series: 'Tales Of Demons And Gods', season: 10 });
+  assert.deepEqual(seriesOf('Swallowed Star Season 5'), { series: 'Swallowed Star', season: 5 });
+  assert.deepEqual(seriesOf('Perfect World 2nd Season'), { series: 'Perfect World', season: 2 });
+  assert.deepEqual(seriesOf('Link Click Second Season'), { series: 'Link Click', season: 2 });
+  assert.deepEqual(seriesOf('Mortal Journey S3'), { series: 'Mortal Journey', season: 3 });
+  assert.deepEqual(seriesOf('Throne of Seal (Season 2) Remastered'), { series: 'Throne of Seal Remastered', season: 2 });
+  assert.deepEqual(seriesOf('Soul Land 2'), { series: 'Soul Land 2', season: null });
+  assert.deepEqual(seriesOf('Season 3'), { series: 'Season 3', season: null }); // nothing left for a series name
+  assert.deepEqual(seriesOf('Shrouding the Heavens'), { series: 'Shrouding the Heavens', season: null });
+});
+
+test('seasons group into one series; up next carries on into the next season', () => {
+  const list = [
+    ep(1, 'Tales Of Demons And Gods Season 10', 'Episode 1'),
+    ep(2, 'Tales Of Demons And Gods Season 9', 'Episode 52'),
+    ep(3, 'Tales of demons and gods season 9', 'Episode 51'),
+    ep(4, 'Swallowed Star Season 5', 'Episode 1'),
+  ];
+  const series = groupBySeries(list);
+  assert.deepEqual(series.map((s) => s.title), ['Swallowed Star', 'Tales Of Demons And Gods']);
+  const todg = series[1];
+  assert.deepEqual(todg.seasons.map((s) => s.season), [9, 10]);
+  assert.deepEqual(todg.episodes.map((e) => e.id), [3, 2, 1]);
+  assert.equal(nextEpisode(list, list[1])?.id, 1); // S9 E52 -> S10 E1
+  assert.equal(nextEpisode(list, list[0]), null);
+});
+
+test('new means downloaded and never opened', () => {
+  const base = { status: 'done' as const, watched: 0, lastPlayedAt: null, positionSec: 0 };
+  assert.ok(isNew(base));
+  assert.ok(!isNew({ ...base, lastPlayedAt: 5 }));
+  assert.ok(!isNew({ ...base, watched: 1 }));
+  assert.ok(!isNew({ ...base, status: 'downloading' }));
+});
+
+test('renaming a series keeps each season number', () => {
+  assert.equal(renamedShow(9, ' Tales of Demons  and Gods '), 'Tales of Demons and Gods Season 9');
+  assert.equal(renamedShow(null, 'Soul Land 2'), 'Soul Land 2');
+  // Renamed seasons still group back into one series.
+  assert.deepEqual(seriesOf(renamedShow(10, 'Tales of Demons and Gods')), { series: 'Tales of Demons and Gods', season: 10 });
 });

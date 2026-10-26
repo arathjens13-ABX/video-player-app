@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 
 
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
+import { setShowCover } from '@/lib/covers';
 import { addBatch, findVideo, listBatch, type Found } from '@/lib/batch';
 import { listEpisodes } from '@/lib/db';
 import { formatBytes } from '@/lib/format';
@@ -100,6 +101,7 @@ export default function BatchScreen() {
     added.current = true;
     logInfo('batch', `season ${show}: ${toGet.length} episodes ${range?.from}–${range?.to} at ≤${quality}p, about ${each ? formatBytes(each) : '?'} each`);
     addBatch(toGet.map((e) => ({ show: e.show, title: e.name, pageUrl: e.url, server, maxHeight: quality })));
+    setShowCover(show, draft?.cover, draft?.listUrl);
     router.back();
     router.navigate('/downloads');
   }

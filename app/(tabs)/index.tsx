@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { playEpisode, showActions } from '@/components/libraryActions';
+import { Poster } from '@/components/Poster';
 import { Text, View } from '@/components/Themed';
 import { Thumbnail } from '@/components/Thumbnail';
 import { useColors } from '@/components/useColors';
@@ -123,20 +124,22 @@ function ContinueCard({ episode, partway }: { episode: Episode; partway: boolean
 function ShowRow({ show }: { show: ShowSummary<Episode> }) {
   const colors = useColors();
   const cover = show.next ?? show.episodes[0];
+  const seasons = show.seasons.filter((s) => s.season !== null).length;
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/show/[key]', params: { key: show.key } })}
-      onLongPress={() => showActions(show.title, show.episodes)}
+      onLongPress={() => showActions(show.title, show.episodes, undefined, show.key)}
       style={({ pressed }) => [styles.showRow, { backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
-      <Thumbnail episode={cover} />
+      <Poster shows={[...show.seasons].reverse().map((s) => s.show)} fallback={cover} />
       <View style={styles.showText} lightColor="transparent" darkColor="transparent">
         <Text style={styles.showTitle} numberOfLines={2}>
           {show.title}
         </Text>
         <Text style={[styles.meta, { color: colors.muted }]} numberOfLines={1}>
-          {show.episodes.length} episode{show.episodes.length === 1 ? '' : 's'}
-          {show.unwatched > 0 && show.unwatched < show.episodes.length ? ` · ${show.unwatched} unwatched` : ''}
-          {show.unwatched === 0 ? ' · all watched' : ''} · {formatBytes(show.bytes)}
+          {seasons > 1 ? `${seasons} seasons · ` : ''}
+          {show.episodes.length} ep{show.episodes.length === 1 ? '' : 's'}
+          {show.unwatched === 0 ? ' · all watched' : show.unwatched < show.episodes.length ? ` · ${show.unwatched} unwatched` : ''} ·{' '}
+          {formatBytes(show.bytes)}
         </Text>
         {show.next ? (
           <Text style={[styles.meta, { color: colors.tint }]} numberOfLines={1}>
@@ -144,6 +147,11 @@ function ShowRow({ show }: { show: ShowSummary<Episode> }) {
           </Text>
         ) : null}
       </View>
+      {show.fresh > 0 ? (
+        <View style={[styles.newBadge, { backgroundColor: colors.tint }]}>
+          <Text style={styles.newBadgeText}>{show.fresh} NEW</Text>
+        </View>
+      ) : null}
       <Text style={[styles.chevron, { color: colors.muted }]}>›</Text>
     </Pressable>
   );
@@ -170,6 +178,8 @@ const styles = StyleSheet.create({
   showTitle: { fontSize: 16, fontWeight: '600' },
   meta: { fontSize: 13, marginTop: 3 },
   chevron: { fontSize: 26, fontWeight: '300' },
+  newBadge: { borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3 },
+  newBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   track: { height: 3 },
   fill: { height: 3 },
 });

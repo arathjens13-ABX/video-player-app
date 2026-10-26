@@ -106,16 +106,18 @@ How it works and what to expect:
 
 ## Watching offline
 
-- Go to the **Library** tab. **Continue watching** at the top has the episode you stopped partway through (or the next one) for each show you're watching. Below it is your list of **Shows**: search by name, and sort by **Recently watched**, **A–Z** or **Recently added**.
-- **Tap a show** to open it: a **Resume / Play** button for where you left off, then all its episodes in order.
-- Tap an episode to play it. It opens **sideways and full screen**, even with your rotation lock on (turn this off in Settings → Player). It remembers where you stopped, and the next episode starts automatically when one finishes (5-second countdown, with Cancel).
+- Go to the **Library** tab. **Continue watching** at the top has where you stopped (or the next episode) for each series you're watching. Below it is your list of **Shows** with their posters: search by name, and sort by **Recently watched**, **A–Z** or **Recently added**. A **NEW** badge counts episodes you haven't opened yet.
+- Seasons of the same show are kept together: *Tales of Demons and Gods* Season 9 and Season 10 are one entry, and the next episode after the last of Season 9 is the first of Season 10.
+- **Tap a show** to open it: its poster, a **Resume / Play** button for where you left off, then each season's episodes (tap a season's name to fold it away).
+- On an episode: **swipe right** to mark it watched (or unwatched), **swipe left** to delete it, or **long-press** to rename it.
+- On a show's page, **•••** (top right) has **Rename or merge…** (for a show listed under two names: pick the other one to combine them; season numbers are kept), mark all watched, **delete the watched episodes**, and **delete the whole series**. Long-pressing a show in the list opens the same menu.
+- Posters come from the site when you download an episode, so shows downloaded before this update get theirs with their next download.
+- Episodes play **sideways and full screen**, even with your rotation lock on (turn this off in Settings → Player). The next episode starts automatically when one finishes (5-second countdown, with Cancel).
 - In the player, tap the video to show the controls:
   - **Double-tap** the left or right side to skip back or forward 10 seconds; keep tapping to skip more.
   - **Skip intro** (first few minutes) jumps ahead 90 seconds.
   - Top bar: **speed** (1× → 1.25× → 1.5× → 2× → 0.75×), **AirPlay**, **Picture in Picture**, and **rotate** (sideways ↔ upright).
   - Drag along the bar at the bottom to jump anywhere.
-- Long-press an **episode** to rename it, mark it watched, or delete it.
-- On a show's page, **•••** (top right) marks the whole show watched, **deletes the watched episodes**, or deletes the show. Long-pressing a show in the list does the same.
 - Your videos also appear in the **Files** app under *On My iPhone › VidStash*.
 
 ---

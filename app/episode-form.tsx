@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useColors } from '@/components/useColors';
 import { getEpisode, updateEpisode, type DownloadKind } from '@/lib/db';
+import { setShowCover } from '@/lib/covers';
 import { enqueue } from '@/lib/downloads';
 import { guessNames } from '@/lib/links';
 import { getStreamQuality, QUALITY_OPTIONS, type StreamQuality } from '@/lib/settings';
@@ -21,6 +22,7 @@ export default function EpisodeForm() {
     referer?: string;
     pageTitle?: string;
     pageUrl?: string;
+    cover?: string;
   }>();
   const colors = useColors();
   // Computed once, not on every keystroke.
@@ -52,6 +54,7 @@ export default function EpisodeForm() {
         pageUrl: params.pageUrl ?? null,
         maxHeight: quality,
       });
+      setShowCover(cleanShow, params.cover, params.pageUrl);
     }
     router.back();
   }
