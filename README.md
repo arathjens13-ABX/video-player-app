@@ -32,6 +32,7 @@ Tested from a cloud server with Chromium, not yet on a phone:
 | Rumble, Dood (playmogo) | ? | Cloudflare blocked the cloud server; needs a phone test |
 | Streamwish (seekplayer) | ? | Player stalls behind a Google ad in headless Chrome; needs a phone test |
 | Mega | ✗ | Decrypts inside the page, so it can't be captured |
+| MediaFire (downloads box) | MP4 file | The file page's direct link is read (desktop and phone layouts) and downloaded as a normal file. Season downloads fall back to the English one when no player works |
 | Vidara (animekhor) | Stream | Detected |
 | Bysekoze / upns / p2pstream (animekhor) | ? | Domain-locked or unreachable from the cloud server; needs a phone test |
 

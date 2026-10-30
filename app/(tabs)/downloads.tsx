@@ -30,6 +30,8 @@ export default function DownloadsScreen() {
     try {
       await routeLink(url);
       setInput('');
+    } catch (e) {
+      Alert.alert('Couldn’t open that link', e instanceof Error ? e.message : String(e));
     } finally {
       setChecking(false);
     }

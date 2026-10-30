@@ -76,6 +76,10 @@ SideStore is ready. You won't need the PC again unless something goes badly wron
    - Some videos are **streams** that come in many small pieces ("120 of 460 pieces"). **Keep VidStash open** until these finish. The screen stays on by itself. If you leave, the download picks up where it stopped next time you open the app.
    - **MP4** downloads keep going even if you leave the app.
 
+### MediaFire downloads
+
+Many AnimeXin episodes have a **Download** box under the player with **Mediafire** links (one per subtitle language, usually 1080p). Tap **Mediafire** next to *Subtitle English*. VidStash fetches the file directly, without opening MediaFire's ad-filled page, and opens the download form. You can also paste a MediaFire link in the Downloads tab, or share one to VidStash.
+
 ### If no video is found
 
 - Tap the bottom button anyway. It lists the page's **Servers** (Dailymotion, ok.ru, Rumble…). Tap a different one, press play again, and wait for "video found".
@@ -122,6 +126,7 @@ On a show's page in Discover, tap **+ Follow**.
 How it works and what to expect:
 
 - It uses the **server you last switched to** on that site (for example Dailymotion). If that server doesn't work for an episode (it isn't on the page, the upload was removed, or no video shows up within 40 seconds), it tries the episode's **other English hardsub servers**, then its **All Sub** servers. An All Sub video is only used if it has **English subtitles**, which are saved with it.
+- If no server works, it uses the episode's **English MediaFire download** when the page has one (usually 1080p, about 170 MB for 20 minutes).
 - Dailymotion uploads that Dailymotion has removed are skipped straight away. If nothing works, the episode is marked **Not found** with the list of servers it tried and why each one failed.
 - Each episode's video is found right before it downloads, one at a time, so links don't expire while they wait. **Keep VidStash open** while it runs (the screen stays on).
 - It **never takes your phone below 20 GB free**. If it gets there, it stops and says so: delete some episodes, then tap **Resume**.

@@ -17,6 +17,7 @@ import { db, listEpisodes, notify, subscribe } from './db';
 import { enqueue } from './downloads';
 import { formatBytes } from './format';
 import { logInfo, logWarn, shortUrl } from './log';
+import { findMediafire } from './mediafire-fallback';
 import type { Candidate, ProbeResult } from './probe';
 import { KEEP_FREE_BYTES, sizeAtQuality } from './season';
 
@@ -206,7 +207,17 @@ async function tick() {
   update(item.id, { status: 'finding' });
   logInfo('batch', `#b${item.id} finding ${item.show} ${item.title} on ${item.server ?? 'page default'}: ${shortUrl(item.pageUrl)}`);
   try {
-    const found = await resolver(item.pageUrl, item.server, controller.signal);
+    let found: Found;
+    try {
+      found = await resolver(item.pageUrl, item.server, controller.signal);
+    } catch (e) {
+      if (controller.signal.aborted) throw e;
+      const file = await findMediafire(item.pageUrl).catch(() => null);
+      if (controller.signal.aborted) throw e;
+      if (!file) throw new Error(`${e instanceof Error ? e.message : String(e)}. No English MediaFire download on the page either.`);
+      logInfo('batch', `#b${item.id} no player worked; using the page's English MediaFire file`);
+      found = file;
+    }
     const r = found.result;
     const size = r.kind === 'hls' ? sizeAtQuality(r.info, item.maxHeight) : r.size;
     if (size) lastSize = size;

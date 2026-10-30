@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewNavigationEvent } from 'react-native-webview/lib/WebViewTypes';
@@ -15,6 +15,7 @@ import { hostOf } from '@/lib/links';
 import { candidateKey, type Candidate } from '@/lib/probe';
 import { relink } from '@/lib/downloads';
 import { logInfo, logWarn, shortUrl } from '@/lib/log';
+import { isMediafirePage, resolveMediafire } from '@/lib/mediafire';
 import { onOpenInBrowser, type BrowserRequest } from '@/lib/open-in-browser';
 import { groupVideos } from '@/lib/candidates';
 import { probeStatus, startProbe, subscribeProbes } from '@/lib/probe-store';
@@ -166,6 +167,11 @@ export default function BrowserScreen() {
       allowOnce.current = null;
       return true;
     }
+    // A MediaFire link in an episode's downloads: fetch the file directly instead of opening its ad-heavy page.
+    if ((Platform.OS !== 'ios' || req.isTopFrame !== false) && isMediafirePage(req.url)) {
+      downloadMediafire(req.url);
+      return false;
+    }
     const block = shouldBlockNavigation({
       url: req.url,
       currentUrl: currentUrl.current,
@@ -200,6 +206,23 @@ export default function BrowserScreen() {
         ...(cover ? { cover } : {}),
       },
     });
+  }
+
+  const [fetchingFile, setFetchingFile] = useState(false);
+  function downloadMediafire(pageUrl: string) {
+    if (fetchingFile) return;
+    setFetchingFile(true);
+    logInfo('browser', `MediaFire link ${shortUrl(pageUrl, 80)}`);
+    resolveMediafire(pageUrl, USER_AGENT)
+      .then((file) => {
+        logInfo('browser', `MediaFire file ${file.fileName ?? '?'} ${file.sizeText ?? ''} on ${hostOf(file.url)}`);
+        download({ url: file.url, kind: 'file', frame: pageUrl, via: 'mediafire' });
+      })
+      .catch((e: unknown) => {
+        logWarn('browser', 'MediaFire failed:', e);
+        Alert.alert('Couldn’t get the MediaFire file', e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setFetchingFile(false));
   }
 
   function switchServer(s: Server) {
@@ -258,6 +281,12 @@ export default function BrowserScreen() {
         </View>
       ) : null}
 
+      {fetchingFile ? (
+        <View style={[styles.banner, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <Text style={styles.bannerText}>Getting the file from MediaFire…</Text>
+        </View>
+      ) : null}
+
       {blocked ? (
         <View style={[styles.banner, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
           <Text style={styles.bannerText} numberOfLines={2}>
@@ -293,7 +322,8 @@ export default function BrowserScreen() {
           onOpenWindow={(e) => {
             // Pop-ups are almost always ads; only follow ones that stay on the same site.
             const target = e.nativeEvent.targetUrl;
-            if (currentUrl.current && sameSite(target, currentUrl.current)) open(target);
+            if (isMediafirePage(target)) downloadMediafire(target);
+            else if (currentUrl.current && sameSite(target, currentUrl.current)) open(target);
             else {
               logInfo('browser', `blocked pop-up ${shortUrl(target, 80)}`);
               setBlocked(target);

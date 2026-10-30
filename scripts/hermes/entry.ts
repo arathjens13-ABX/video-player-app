@@ -7,6 +7,7 @@ import { URL } from '../../lib/url';
 import { pickSubtitle, parsePlaylist } from '../../lib/hls';
 import { cueTextAt, joinVtt, parseCues } from '../../lib/subtitles';
 import { dailymotionId, serverOrder } from '../../lib/finder';
+import { nextMediafirePage, parseMediafirePage, parseSizeText } from '../../lib/mediafire';
 
 declare const print: ((s: string) => void) | undefined;
 const log = (s: string) => (typeof print === 'function' ? print(s) : console.log(s));
@@ -96,8 +97,17 @@ function checkSubtitles() {
   log(`RESULT subtitles pick=${pick} cues=${cues.length} at1=${cueTextAt(cues, 1.5)} at60=${cueTextAt(cues, 60.2)} order=${order.join('|')} dm=${dailymotionId('https://geo.dailymotion.com/player/x.html?video=k2')}`);
 }
 
+function checkMediafire() {
+  const page = 'https://www.mediafire.com/file/abc123/ep_1_eng.mp4/file';
+  const mobile = '<a aria-label="Download file" href="//www.mediafire.com/file/abc123/ep_1_eng.mp4/file?dkey=k&amp;r=5" onclick="setTimeout(() => {f()}, 1000)" id="downloadButton">x</a>';
+  const desktop = '<div class="filename">ep 1 eng.mp4</div><li>File size: <span>171.4MB</span></li><a class="input" href="https://download12.mediafire.com/k/abc123/ep_1_eng.mp4" id="downloadButton" rel="nofollow">x</a>';
+  const file = parseMediafirePage(desktop);
+  log(`RESULT mediafire next=${nextMediafirePage(mobile, page)} mobileFile=${parseMediafirePage(mobile)} file=${file?.url} name=${file?.fileName} size=${parseSizeText(file?.sizeText ?? null)}`);
+}
+
 (async () => {
   checkSubtitles();
+  checkMediafire();
   await run('ts-aes', 'https://cdn.test/ts-aes/index.m3u8');
   await run('fmp4-split', 'https://cdn.test/fmp4-split/master.m3u8');
   await run('ts-ranges', 'https://cdn.test/ts-ranges/index.m3u8');

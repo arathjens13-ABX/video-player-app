@@ -172,3 +172,28 @@ export function parseSchedule(html: string, base: string): ScheduleDay[] {
 export function isChallenge(html: string): boolean {
   return /<title>\s*Just a moment|cf-browser-verification|challenge-platform/i.test(html.slice(0, 20000));
 }
+
+/** A file link from an episode's downloads box: "Subtitle English" · "1080" · "Mediafire". */
+export type DownloadLink = { group: string; quality: string; host: string; url: string };
+
+/** The downloads box of an episode page (Terabox, Mirror, MediaFire… per subtitle language and quality). */
+export function parseDownloads(html: string, url: string): DownloadLink[] {
+  const root = parse(html);
+  const out: DownloadLink[] = [];
+  for (const block of root.querySelectorAll('.soraddlx, .soraddl')) {
+    const group = clean(block.querySelector('.sorattlx h3, .sorattl h3, h3')?.text);
+    for (const row of block.querySelectorAll('.soraurlx, .soraurl')) {
+      const quality = clean(row.querySelector('strong')?.text);
+      for (const a of row.querySelectorAll('a[href]')) {
+        const href = absolute(a.getAttribute('href'), url);
+        if (href) out.push({ group, quality, host: clean(a.text), url: href });
+      }
+    }
+  }
+  return out;
+}
+
+/** Whether a download is the English-subtitled one (by its heading, or "_eng" in the file name). */
+export function isEnglishDownload(d: DownloadLink): boolean {
+  return /\benglish\b|\beng\b/i.test(d.group) || /[_\-.]eng[_\-.]/i.test(d.url);
+}
