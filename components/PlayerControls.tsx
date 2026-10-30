@@ -21,6 +21,9 @@ type Props = {
   duration: number;
   landscape: boolean;
   onToggleRotate: () => void;
+  /** Saved subtitles: whether they're on and the line to show now. Null when the video has none. */
+  captions: { on: boolean; text: string } | null;
+  onToggleCaptions: () => void;
   /** How far Skip intro jumps for this series, and a way to change it (remembered per series). */
   introSec: number;
   onSetIntroSec: (seconds: number) => void;
@@ -138,6 +141,14 @@ export function PlayerControls(p: Props) {
         </View>
       ) : null}
 
+      {p.captions?.text ? (
+        <View
+          style={[styles.captions, { bottom: (visible ? 96 : 24) + insets.bottom, left: insets.left + 24, right: insets.right + 24 }]}
+          pointerEvents="none">
+          <Text style={styles.captionText}>{p.captions.text}</Text>
+        </View>
+      ) : null}
+
       {visible ? (
         <View style={[StyleSheet.absoluteFill, styles.scrim]} pointerEvents="box-none">
           <View
@@ -164,6 +175,18 @@ export function PlayerControls(p: Props) {
               accessibilityLabel="Playback speed">
               <Text style={styles.pillText}>{rateLabel(playbackRate)}</Text>
             </Pressable>
+            {p.captions ? (
+              <Pressable
+                onPress={() => {
+                  p.onToggleCaptions();
+                  touch();
+                }}
+                hitSlop={8}
+                style={[styles.pill, p.captions.on && styles.pillOn]}
+                accessibilityLabel={p.captions.on ? 'Hide subtitles' : 'Show subtitles'}>
+                <Text style={[styles.pillText, p.captions.on && styles.pillOnText]}>CC</Text>
+              </Pressable>
+            ) : null}
             {Platform.OS === 'ios' ? <VideoAirPlayButton style={styles.airplay} tint="#fff" /> : null}
             <RoundButton onPress={p.onPictureInPicture} label="Picture in Picture">
               <Icon ios="pip.enter" android="picture_in_picture_alt" size={20} />
@@ -286,6 +309,22 @@ const styles = StyleSheet.create({
   airplay: { width: 40, height: 40 },
   pill: { paddingHorizontal: 12, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center' },
   pillText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  pillOn: { backgroundColor: 'rgba(255,255,255,0.92)' },
+  pillOnText: { color: '#000' },
+  captions: { position: 'absolute', alignItems: 'center' },
+  captionText: {
+    color: '#fff',
+    fontSize: 19,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    overflow: 'hidden',
+    textShadowColor: '#000',
+    textShadowRadius: 3,
+  },
   center: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 40 },
   bottom: { gap: 10 },
   skipIntro: { alignSelf: 'flex-end', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.92)' },

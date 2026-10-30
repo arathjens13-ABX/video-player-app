@@ -14,6 +14,9 @@ export type Variant = {
 
 export type AudioRendition = { groupId: string; url?: string; isDefault: boolean; name?: string; language?: string };
 
+/** A subtitle track offered alongside the video (soft subs, e.g. Dailymotion's "All Sub" uploads). */
+export type SubtitleTrack = { url: string; language?: string; name?: string; isDefault: boolean; forced: boolean };
+
 export type Key = { method: 'NONE' | 'AES-128' | 'SAMPLE-AES' | string; url?: string; iv?: string };
 
 export type Segment = {
@@ -27,7 +30,7 @@ export type Segment = {
   sequence: number;
 };
 
-export type MasterPlaylist = { type: 'master'; variants: Variant[]; audio: AudioRendition[] };
+export type MasterPlaylist = { type: 'master'; variants: Variant[]; audio: AudioRendition[]; subtitles: SubtitleTrack[] };
 export type MediaPlaylist = { type: 'media'; segments: Segment[]; duration: number; ended: boolean };
 export type Playlist = MasterPlaylist | MediaPlaylist;
 
@@ -61,9 +64,14 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
   if (lines.some((l) => l.startsWith('#EXT-X-STREAM-INF'))) {
     const variants: Variant[] = [];
     const audio: AudioRendition[] = [];
+    const subtitles: SubtitleTrack[] = [];
     for (const line of lines) {
       if (!line.startsWith('#EXT-X-MEDIA:')) continue;
       const a = parseAttributes(line.slice('#EXT-X-MEDIA:'.length));
+      if (a.TYPE === 'SUBTITLES' && a.URI) {
+        subtitles.push({ url: resolve(a.URI, baseUrl), language: a.LANGUAGE, name: a.NAME, isDefault: a.DEFAULT === 'YES', forced: a.FORCED === 'YES' });
+        continue;
+      }
       if (a.TYPE !== 'AUDIO') continue;
       audio.push({
         groupId: a['GROUP-ID'],
@@ -89,7 +97,7 @@ export function parsePlaylist(text: string, baseUrl: string): Playlist {
         audioGroup: attrs.AUDIO,
       });
     }
-    return { type: 'master', variants, audio };
+    return { type: 'master', variants, audio, subtitles };
   }
 
   const segments: Segment[] = [];
@@ -165,6 +173,8 @@ export type StreamInfo = {
   /** Total duration in seconds of the best variant (or the playlist itself). */
   duration: number;
   qualities: { label: string; url: string; height?: number; bandwidth: number }[];
+  /** Soft subtitle languages offered ("English", "Español"…), if any. */
+  subtitles: { language?: string; name?: string }[];
   encrypted: boolean;
   /** SAMPLE-AES and other DRM-ish schemes can't be downloaded. */
   unsupportedEncryption: boolean;
@@ -185,7 +195,9 @@ export async function loadPlaylist(url: string, fetchText: FetchText): Promise<P
 export async function describeStream(url: string, fetchText: FetchText): Promise<StreamInfo> {
   let playlist = await loadPlaylist(url, fetchText);
   let qualities: StreamInfo['qualities'] = [];
+  let subtitles: StreamInfo['subtitles'] = [];
   if (playlist.type === 'master') {
+    subtitles = playlist.subtitles.filter((t) => !t.forced).map((t) => ({ language: t.language, name: t.name }));
     qualities = [...playlist.variants]
       .sort((a, b) => (b.height ?? 0) - (a.height ?? 0) || b.bandwidth - a.bandwidth)
       .map((v) => ({
@@ -203,7 +215,30 @@ export async function describeStream(url: string, fetchText: FetchText): Promise
   return {
     duration: playlist.duration,
     qualities,
+    subtitles,
     encrypted: methods.size > 0,
     unsupportedEncryption: [...methods].some((m) => m !== 'AES-128'),
   };
+}
+
+/** Whether a subtitle track is in the given language ("en" matches "en", "en-US", "eng", or a name like "English"). */
+export function isLanguage(track: { language?: string; name?: string }, lang: string): boolean {
+  const code = (track.language ?? '').toLowerCase();
+  if (code === lang || code.startsWith(`${lang}-`) || (lang === 'en' && code === 'eng')) return true;
+  return lang === 'en' && /\benglish\b/i.test(track.name ?? '');
+}
+
+/** The subtitle track to save for a language (full subtitles over "forced" ones), if the stream has one. */
+export function pickSubtitle(tracks: SubtitleTrack[], lang = 'en'): SubtitleTrack | undefined {
+  const matching = tracks.filter((t) => isLanguage(t, lang));
+  return matching.find((t) => !t.forced) ?? matching[0];
+}
+
+/** For lists of found videos: "English subtitles", "subtitles: es, pt, it +6 (no English)", or null when there are none. */
+export function subtitleSummary(tracks: { language?: string; name?: string }[]): string | null {
+  if (tracks.length === 0) return null;
+  if (tracks.some((t) => isLanguage(t, 'en'))) return 'English subtitles';
+  const names = [...new Set(tracks.map((t) => t.language ?? t.name ?? '?'))];
+  const shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3}` : '');
+  return `subtitles: ${shown} (no English)`;
 }

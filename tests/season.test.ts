@@ -52,6 +52,7 @@ test('size at a quality cap and how many fit above the floor', () => {
     ],
     encrypted: false,
     unsupportedEncryption: false,
+    subtitles: [],
   };
   assert.equal(sizeAtQuality(info, 720), (2_000_000 * 961) / 8);
   assert.equal(sizeAtQuality(info, 1080), (4_000_000 * 961) / 8);

@@ -14,11 +14,12 @@ import {
 import { fetchBytes, fetchText, FilePartStore, FileSink, partsDir, partsRoot } from './fs-io';
 import { formatBytes } from './format';
 import { requestHeaders } from './http';
-import { assemble, downloadParts, partsSize, planFingerprint, planStream } from './hls-download';
+import { assemble, downloadParts, loadSubtitles, partsSize, planFingerprint, planStream, type StreamPlan } from './hls-download';
 import { logError, logInfo, logWarn, shortUrl } from './log';
 import { getStreamQuality } from './settings';
 import { deleteThumbnail, ensureThumbnail, thumbsDir } from './thumbs';
 import { sniffVideo, type SniffResult } from './sniff';
+import { subtitleFileName } from './subtitles';
 import { USER_AGENT } from './ua';
 import { URL } from './url';
 
@@ -34,6 +35,11 @@ export const videosDir = new Directory(Paths.document, 'videos');
 
 export function videoFile(episode: Pick<Episode, 'fileName'>) {
   return new File(videosDir, episode.fileName);
+}
+
+/** Soft subtitles saved with the video, if the stream had English ones. */
+export function subtitleFile(episode: Pick<Episode, 'fileName'>) {
+  return new File(videosDir, subtitleFileName(episode.fileName));
 }
 
 const active = new Map<number, Job>(); // the current job per episode
@@ -311,6 +317,7 @@ function runStream(episode: Episode, job: Job): Promise<void> {
     if (!job.isCurrent()) return;
     const size = videoFile(episode).size ?? 0;
     logInfo('stream', `#${episode.id} done ${formatBytes(size)} ${Math.round(duration)}s`);
+    await saveSubtitles(episode, plan, headers);
     updateEpisode(episode.id, { status: 'done', bytesWritten: size, totalBytes: size, durationSec: duration });
     deleteParts(episode.id);
     makeThumbnail(episode.id);
@@ -320,6 +327,26 @@ function runStream(episode: Episode, job: Job): Promise<void> {
       updateEpisode(episode.id, { status: 'paused' });
     } else failed(job, episode.id, err);
   });
+}
+
+/** Best effort: a video without its subtitles still plays, so failures are only logged. */
+async function saveSubtitles(episode: Episode, plan: StreamPlan, headers: Record<string, string>) {
+  if (!plan.subtitle) return;
+  const label = plan.subtitle.name ?? plan.subtitle.language ?? 'subtitles';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const vtt = await loadSubtitles(plan.subtitle, fetchText(headers, controller.signal));
+    const file = subtitleFile(episode);
+    if (file.exists) file.delete();
+    file.create();
+    file.write(vtt);
+    logInfo('stream', `#${episode.id} saved ${label} subtitles (${formatBytes(vtt.length)})`);
+  } catch (e) {
+    logWarn('stream', `#${episode.id} couldn’t save ${label} subtitles:`, e);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function makeThumbnail(id: number) {
@@ -429,9 +456,8 @@ export function remove(id: number) {
   detach(id);
   const episode = getEpisode(id);
   if (episode) {
-    const file = videoFile(episode);
     try {
-      if (file.exists) file.delete();
+      for (const file of [videoFile(episode), subtitleFile(episode)]) if (file.exists) file.delete();
     } catch {
       // The row still goes; a leftover file is cleaned up with the videos folder.
     }
@@ -462,10 +488,10 @@ export function cleanUpFiles(): number {
       }
     }
     if (videosDir.exists) {
-      const known = new Set([...episodes.values()].map((e) => e.fileName));
+      const known = new Set([...episodes.values()].flatMap((e) => [e.fileName, subtitleFileName(e.fileName)]));
       for (const entry of videosDir.list()) {
-        // Only files the app named itself ("<id>.mp4"): the folder is visible in the Files app.
-        if (/^\d+\.mp4$/.test(entry.name) && !known.has(entry.name)) {
+        // Only files the app named itself ("<id>.mp4", "<id>.vtt"): the folder is visible in the Files app.
+        if (/^\d+\.(mp4|vtt)$/.test(entry.name) && !known.has(entry.name)) {
           freed += entry.size ?? 0;
           entry.delete();
         }

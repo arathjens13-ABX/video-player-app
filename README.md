@@ -13,6 +13,7 @@ Download videos to your phone and watch them offline. It runs on iPhone and Andr
 - **Share sheet:** send links from Safari or other apps (see *Send links from anywhere* below).
 - Download queue: two at a time, progress, pause/resume, retry, remove. On iPhone, downloads keep going when you leave the app. Finished files are checked, so an error page saved as `.mp4` shows up as a failed download.
 - Library grouped by show, episodes in number order. Tap to play; long-press to rename, mark as watched, or delete.
+- **Soft subtitles:** when a stream offers English subtitles (Dailymotion "All Sub" uploads often do), they're saved next to the video as `<id>.vtt` and shown in the player with a CC button.
 - Player: resumes where you left off, Picture-in-Picture, background audio, AirPlay. Episodes count as watched at 90%. When one ends, the next downloaded episode starts after a 5-second countdown.
 - On iPhone, downloaded files also appear in the Files app (On My iPhone › VidStash).
 
@@ -24,7 +25,7 @@ Tested from a cloud server with Chromium, not yet on a phone:
 
 | Mirror | Found as | Notes |
 |---|---|---|
-| Dailymotion | Stream | Video and audio are separate streams; the app combines them (tested end to end) |
+| Dailymotion | Stream | Video and audio are separate streams; the app combines them (tested end to end). "All Sub" uploads carry selectable subtitles, English only sometimes. Removed uploads are detected through Dailymotion's player metadata and skipped by season downloads |
 | ok.ru | Stream | Tested end to end. Link is tied to your IP address; switching Wi-Fi ↔ cellular mid-download will break it |
 | d.tube | Stream | 1080p/720p/360p (tested end to end) |
 | Odysee | MP4 | Refused requests from the cloud server; needs a phone test |

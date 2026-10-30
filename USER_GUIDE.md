@@ -79,6 +79,7 @@ SideStore is ready. You won't need the PC again unless something goes badly wron
 ### If no video is found
 
 - Tap the bottom button anyway. It lists the page's **Servers** (Dailymotion, ok.ru, Rumble…). Tap a different one, press play again, and wait for "video found".
+- If only **All Sub** servers work, check the found video's line: it says **English subtitles** when it has them (they're saved with the download), or which languages it has instead.
 - On AnimeXin, **Dailymotion**, **ok.ru** and **Dtube** are the most likely to work. **Mega** never works (it scrambles the video inside the page).
 
 ### If a download fails
@@ -120,7 +121,8 @@ On a show's page in Discover, tap **+ Follow**.
 
 How it works and what to expect:
 
-- It uses the **server you last switched to** on that site (for example Dailymotion). If an episode doesn't have that server, it uses whatever the episode page plays first.
+- It uses the **server you last switched to** on that site (for example Dailymotion). If that server doesn't work for an episode (it isn't on the page, the upload was removed, or no video shows up within 40 seconds), it tries the episode's **other English hardsub servers**, then its **All Sub** servers. An All Sub video is only used if it has **English subtitles**, which are saved with it.
+- Dailymotion uploads that Dailymotion has removed are skipped straight away. If nothing works, the episode is marked **Not found** with the list of servers it tried and why each one failed.
 - Each episode's video is found right before it downloads, one at a time, so links don't expire while they wait. **Keep VidStash open** while it runs (the screen stays on).
 - It **never takes your phone below 20 GB free**. If it gets there, it stops and says so: delete some episodes, then tap **Resume**.
 - The **Downloads** tab shows the list under **Season downloads**, with **Pause**, **Resume** and **Stop**. An episode whose video can't be found is marked so; tap **Retry**, or **Open page** to do it by hand.
@@ -137,7 +139,8 @@ How it works and what to expect:
 - In the player, tap the video to show the controls:
   - **Double-tap** the left or right side to skip back or forward 10 seconds; keep tapping to skip more.
   - **Skip intro** (first 5 minutes) jumps ahead by one intro's length (90 seconds unless changed) and then goes away for that episode. **Long-press** it to set this show's intro length (60–120 seconds); it's remembered for the whole series.
-  - Top bar: **speed** (1× → 1.25× → 1.5× → 2× → 0.75×), **AirPlay**, **Picture in Picture**, and **rotate** (sideways ↔ upright).
+  - Top bar: **speed** (1× → 1.25× → 1.5× → 2× → 0.75×), **CC** (subtitles on/off, only on videos that came with subtitles), **AirPlay**, **Picture in Picture**, and **rotate** (sideways ↔ upright).
+- **Subtitles:** if a stream offers English subtitles you can switch on or off (Dailymotion "All Sub" uploads often do), they're downloaded with the video and shown in the player. Hardsub videos have the subtitles burned into the picture, so they have no CC button. Saved subtitles show in VidStash's own player only, not in Picture in Picture or on AirPlay.
   - Drag along the bar at the bottom to jump anywhere.
 - Your videos also appear in the **Files** app under *On My iPhone › VidStash*.
 

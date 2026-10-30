@@ -15,6 +15,7 @@ const stream = (duration: number, heights: number[] = []): ProbeResult => ({
     qualities: heights.map((h) => ({ label: `${h}p`, url: `https://x/${h}.m3u8`, height: h, bandwidth: h * 2000 })),
     encrypted: false,
     unsupportedEncryption: false,
+    subtitles: [],
   },
 });
 

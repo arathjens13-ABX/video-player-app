@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 
 import { formatBytes, formatDuration } from '@/lib/format';
+import { subtitleSummary } from '@/lib/hls';
 import type { Server } from '@/lib/detector-messages';
 import { estimatedSize, groupVideos, sourceLabel, type VideoGroup } from '@/lib/candidates';
 import { hostOf } from '@/lib/links';
@@ -144,6 +145,7 @@ function VideoCard({ group, recommended, onDownload }: { group: VideoGroup; reco
     r.kind === 'hls' && size ? `about ${formatBytes(size)}` : null,
     r.kind === 'hls' && r.info.qualities.length > 1 ? `${r.info.qualities.length} qualities` : null,
     r.kind === 'hls' && r.info.encrypted ? 'encrypted' : null,
+    r.kind === 'hls' ? subtitleSummary(r.info.subtitles) : null,
   ]
     .filter(Boolean)
     .join(' · ');

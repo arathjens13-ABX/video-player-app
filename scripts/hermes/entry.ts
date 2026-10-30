@@ -4,6 +4,9 @@ import FIXTURES from './fixtures.gen.js';
 import { assemble, downloadParts, planStream, type PartStore } from '../../lib/hls-download';
 import type { OutputSink } from '../../lib/mp4/flatten';
 import { URL } from '../../lib/url';
+import { pickSubtitle, parsePlaylist } from '../../lib/hls';
+import { cueTextAt, joinVtt, parseCues } from '../../lib/subtitles';
+import { dailymotionId, serverOrder } from '../../lib/finder';
 
 declare const print: ((s: string) => void) | undefined;
 const log = (s: string) => (typeof print === 'function' ? print(s) : console.log(s));
@@ -72,7 +75,29 @@ async function run(name: string, url: string) {
   log(`B64 ${name} ${toB64(out)}`);
 }
 
+// Subtitles and server choice use regexes and URL parsing that Hermes must handle the same way as Node.
+function checkSubtitles() {
+  const master = parsePlaylist(
+    '#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="s",LANGUAGE="es",NAME="Español",URI="es.m3u8"\n' +
+      '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="s",LANGUAGE="en",NAME="English",URI="en.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=1,SUBTITLES="s"\nv.m3u8\n',
+    'https://cdn.test/m.m3u8'
+  );
+  const pick = master.type === 'master' ? pickSubtitle(master.subtitles)?.url : 'not a master';
+  const vtt = joinVtt(['WEBVTT\n\n00:00:01.000 --> 00:00:02.500 line:90%\n<i>One</i> &amp; two\n', '1\r\n00:01:00,000 --> 00:01:01,000\r\n{\\an8}Three\r\n']);
+  const cues = parseCues(vtt);
+  const order = serverOrder(
+    [
+      { label: 'Hardsub English Mega', url: 'https://mega.nz/e/1' },
+      { label: 'All Sub Player Dailymotion', url: 'https://geo.dailymotion.com/player/x.html?video=k2' },
+      { label: 'Hardsub English Ok.ru', url: 'https://ok.ru/videoembed/1' },
+    ],
+    null
+  ).map((s) => s.label);
+  log(`RESULT subtitles pick=${pick} cues=${cues.length} at1=${cueTextAt(cues, 1.5)} at60=${cueTextAt(cues, 60.2)} order=${order.join('|')} dm=${dailymotionId('https://geo.dailymotion.com/player/x.html?video=k2')}`);
+}
+
 (async () => {
+  checkSubtitles();
   await run('ts-aes', 'https://cdn.test/ts-aes/index.m3u8');
   await run('fmp4-split', 'https://cdn.test/fmp4-split/master.m3u8');
   await run('ts-ranges', 'https://cdn.test/ts-ranges/index.m3u8');

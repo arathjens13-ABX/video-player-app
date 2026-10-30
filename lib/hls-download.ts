@@ -11,7 +11,8 @@
  */
 
 import { decryptAes128Cbc } from './aes';
-import { audioFor, loadPlaylist, pickVariant, type FetchText, type MediaPlaylist, type Segment } from './hls';
+import { audioFor, loadPlaylist, pickSubtitle, pickVariant, type FetchText, type MediaPlaylist, type Segment, type SubtitleTrack } from './hls';
+import { joinVtt, MAX_SUBTITLE_CHARS } from './subtitles';
 import { readBoxes } from './mp4/boxes';
 import { FlatMp4Writer, type OutputSink } from './mp4/flatten';
 import { TsToFmp4 } from './mp4/transmux';
@@ -44,6 +45,8 @@ export type StreamPlan = {
   height?: number;
   /** Rough size from the advertised bitrate, when the playlist gives one. */
   estimatedBytes?: number;
+  /** English soft subtitles offered with the stream, saved alongside the video. */
+  subtitle?: SubtitleTrack;
 };
 
 function abortError() {
@@ -94,7 +97,9 @@ export async function planStream(url: string, fetchText: FetchText, maxHeight = 
   let audioUrl: string | undefined;
   let height: number | undefined;
   let bandwidth: number | undefined;
+  let subtitle: SubtitleTrack | undefined;
   if (playlist.type === 'master') {
+    subtitle = pickSubtitle(playlist.subtitles);
     const variant = pickVariant(playlist.variants, maxHeight);
     if (!variant) throw new Error('The stream has no playable versions');
     height = variant.height;
@@ -117,7 +122,28 @@ export async function planStream(url: string, fetchText: FetchText, maxHeight = 
     streams.push(partsFor('audio', audio.segments));
   }
   const estimatedBytes = bandwidth ? Math.round((bandwidth / 8) * playlist.duration) : undefined;
-  return { streams, format, duration: playlist.duration, height, estimatedBytes };
+  return { streams, format, duration: playlist.duration, height, estimatedBytes, subtitle };
+}
+
+const MAX_SUBTITLE_PIECES = 2000;
+
+/** The whole subtitle track as one WebVTT file (its playlist may split it into many pieces). */
+export async function loadSubtitles(track: SubtitleTrack, fetchText: FetchText): Promise<string> {
+  const playlist = await loadPlaylist(track.url, fetchText);
+  if (playlist.type !== 'media') throw new Error('Unexpected subtitle playlist layout');
+  if (playlist.segments.length > MAX_SUBTITLE_PIECES) throw new Error('Subtitle track has too many pieces');
+  const pieces: string[] = [];
+  let total = 0;
+  for (const segment of playlist.segments) {
+    const got = await fetchText(segment.url);
+    const text = typeof got === 'string' ? got : got.text;
+    total += text.length;
+    if (total > MAX_SUBTITLE_CHARS) throw new Error('Subtitle track is too big');
+    pieces.push(text);
+  }
+  const vtt = joinVtt(pieces);
+  if (!vtt.includes('-->')) throw new Error('Subtitle track has no cues');
+  return vtt;
 }
 
 export function allParts(plan: StreamPlan): Part[] {

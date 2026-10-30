@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { describeStream, parseAttributes, parsePlaylist, pickVariant } from '../lib/hls';
+import { describeStream, isLanguage, parseAttributes, parsePlaylist, pickSubtitle, pickVariant, subtitleSummary } from '../lib/hls';
 
 const MASTER = `#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aac",NAME="(original)",URI="audio/index.m3u8"
@@ -98,4 +98,34 @@ test('absurd playlists are refused instead of freezing the app', () => {
   const huge = '#EXTM3U\n' + Array.from({ length: 50_001 }, (_, i) => `#EXTINF:1,\ns${i}.ts`).join('\n');
   assert.throws(() => parsePlaylist(huge, 'https://x.test/'), /too many pieces/);
   assert.throws(() => parsePlaylist('#EXTM3U\n' + '#'.repeat(10_000_001), 'https://x.test/'), /too large/);
+});
+
+test('reads soft subtitle tracks and picks the English one', () => {
+  const text = `#EXTM3U
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="es",NAME="Español",URI="https://cdn.test/sub/es.m3u8?sec=x"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="en",NAME="English (forced)",FORCED=YES,URI="en-forced.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="en-US",NAME="English",DEFAULT=YES,URI="en.m3u8"
+#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID="cc",LANGUAGE="en",INSTREAM-ID="CC1"
+#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720,SUBTITLES="subs"
+720.m3u8
+`;
+  const p = parsePlaylist(text, 'https://cdn.test/master.m3u8');
+  assert.equal(p.type, 'master');
+  if (p.type !== 'master') return;
+  assert.equal(p.subtitles.length, 3);
+  assert.equal(p.subtitles[0].url, 'https://cdn.test/sub/es.m3u8?sec=x');
+  assert.equal(pickSubtitle(p.subtitles)?.url, 'https://cdn.test/en.m3u8');
+  assert.equal(pickSubtitle(p.subtitles, 'de'), undefined);
+  assert.equal(pickSubtitle([{ url: 'x', name: 'English', isDefault: false, forced: false }])?.url, 'x');
+  assert.equal(isLanguage({ language: 'eng' }, 'en'), true);
+  assert.equal(isLanguage({ language: 'es', name: 'Spanish' }, 'en'), false);
+});
+
+test('summarises subtitle tracks for the found-videos list', () => {
+  assert.equal(subtitleSummary([]), null);
+  assert.equal(subtitleSummary([{ language: 'es' }, { language: 'en' }]), 'English subtitles');
+  assert.equal(
+    subtitleSummary(['es', 'pt', 'it', 'de', 'tr'].map((language) => ({ language }))),
+    'subtitles: es, pt, it +2 (no English)'
+  );
 });

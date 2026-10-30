@@ -8,10 +8,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PlayerControls } from '@/components/PlayerControls';
 import { getEpisode, listEpisodes, notify, updateEpisode, type Episode } from '@/lib/db';
-import { videoFile } from '@/lib/downloads';
+import { subtitleFile, videoFile } from '@/lib/downloads';
 import { nextEpisode, seriesKey } from '@/lib/library';
 import { logError, logInfo, logWarn } from '@/lib/log';
-import { getIntroSkip, getStartLandscape, setIntroSkip } from '@/lib/settings';
+import { getIntroSkip, getStartLandscape, getSubtitlesOn, setIntroSkip, setSubtitlesOn } from '@/lib/settings';
+import { cueTextAt, parseCues, type Cue } from '@/lib/subtitles';
 
 function playEpisode(id: number) {
   router.replace({ pathname: '/player/[id]', params: { id } });
@@ -32,14 +33,29 @@ export default function PlayerScreen() {
 
 const UP_NEXT_SECONDS = 5;
 
+/** The subtitles saved with an episode, or none. */
+function readCues(episode: Episode | null): Cue[] {
+  if (!episode) return [];
+  try {
+    const file = subtitleFile(episode);
+    return file.exists ? parseCues(file.textSync()) : [];
+  } catch (e) {
+    logWarn('player', `#${episode.id} subtitles unreadable:`, e);
+    return [];
+  }
+}
+
 function Player({ episodeId }: { episodeId: number }) {
   // Read once: re-rendering on every position save would reset the player.
   const [episode] = useState(() => getEpisode(episodeId));
   const uri = episode ? videoFile(episode).uri : null;
+  const [cues] = useState(() => readCues(episode));
+  const [subsOn, setSubsOn] = useState(getSubtitlesOn);
 
   const player = useVideoPlayer(uri ? { uri, metadata: { title: episode?.title, artist: episode?.show } } : null, (p) => {
-    // Twice a second keeps the scrub bar smooth; the position is saved less often (savePosition).
-    p.timeUpdateEventInterval = 0.5;
+    // Twice a second keeps the scrub bar smooth (four times with subtitles, so lines change on time);
+    // the position is saved less often (savePosition).
+    p.timeUpdateEventInterval = cues.length ? 0.25 : 0.5;
     p.showNowPlayingNotification = true;
     p.staysActiveInBackground = true;
     p.allowsExternalPlayback = true;
@@ -174,6 +190,11 @@ function Player({ episodeId }: { episodeId: number }) {
             duration={time.duration}
             landscape={landscape}
             onToggleRotate={() => setLandscape((l) => !l)}
+            captions={cues.length ? { on: subsOn, text: subsOn ? cueTextAt(cues, time.current) : '' } : null}
+            onToggleCaptions={() => {
+              setSubsOn(!subsOn);
+              setSubtitlesOn(!subsOn);
+            }}
             introSec={introSec}
             onSetIntroSec={(sec) => {
               setIntroSec(sec);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
@@ -11,9 +11,10 @@ import { FinderSession } from '@/lib/finder';
 import { logInfo, shortUrl } from '@/lib/log';
 import { probeStatus, startProbe } from '@/lib/probe-store';
 import { USER_AGENT } from '@/lib/ua';
+import { uploadProblem } from '@/lib/upload-check';
 
-/** How long a page gets to produce its video. */
-const TIMEOUT_MS = 45_000;
+/** How long a page gets in all, across every server tried (each gets PER_SERVER_MS). */
+const TIMEOUT_MS = 180_000;
 /** How long to wait for the server list before using the page's default player. */
 const SERVERS_WAIT_MS = 8_000;
 
@@ -29,6 +30,12 @@ function abortError() {
   const e = new Error('Aborted');
   e.name = 'AbortError';
   return e;
+}
+
+/** Points the page's player at a mirror, and checks in the meantime whether its upload still exists. */
+function switchServer(webview: RefObject<WebView | null>, session: FinderSession, url: string) {
+  webview.current?.injectJavaScript(switchServerJs(url));
+  uploadProblem(url).then((problem) => problem && session.markGone(url, problem));
 }
 
 /**
@@ -54,7 +61,8 @@ export function VideoFinder() {
         next();
         return;
       }
-      job.current = { job: j, session: new FinderSession(j.server), started: Date.now() };
+      const started = Date.now();
+      job.current = { job: j, session: new FinderSession(j.server, started), started };
       setSource({ uri: j.pageUrl, key: Date.now() });
     }
 
@@ -73,17 +81,24 @@ export function VideoFinder() {
       if (!current) return;
       const now = Date.now();
       if (current.job.signal.aborted) return finish(abortError());
-      if (now - current.started > SERVERS_WAIT_MS) current.session.settleWithoutServers();
-      for (const c of current.session.accepted) startProbe(c);
-      const found = current.session.pick(probeStatus, now);
+      const session = current.session;
+      if (now - current.started > SERVERS_WAIT_MS) {
+        const switchTo = session.settleWithoutServers(now);
+        if (switchTo) switchServer(webview, session, switchTo);
+      }
+      for (const c of session.accepted) startProbe(c);
+      const found = session.pick(probeStatus, now);
       if (found) {
-        logInfo('batch', `found ${shortUrl(found.candidate.url)} on ${current.session.serverUsed ?? 'page default'}`);
+        logInfo('batch', `found ${shortUrl(found.candidate.url)} on ${session.serverUsed ?? 'page default'}`);
         return finish(found);
       }
-      if (now - current.started > TIMEOUT_MS) {
-        const where = current.session.serverUsed ?? (current.job.server ? `the page’s default player (“${current.job.server}” isn’t on this page)` : 'the page’s player');
-        finish(new Error(`No video found on ${where} within ${TIMEOUT_MS / 1000} s`));
+      const next = session.moveOn(probeStatus, now);
+      if (next === 'none') return finish(new Error(session.failure()));
+      if (next) {
+        logInfo('batch', `${session.tried[session.tried.length - 1]}; trying ${session.serverUsed}`);
+        switchServer(webview, session, next);
       }
+      if (now - current.started > TIMEOUT_MS) finish(new Error(`${session.failure()} (gave up after ${TIMEOUT_MS / 60_000} min)`));
     }, 500);
 
     const unregister = setResolver(
@@ -105,7 +120,7 @@ export function VideoFinder() {
     if (!current || !msg) return;
     if (msg.type === 'servers') {
       const switchTo = current.session.onServers(msg.servers);
-      if (switchTo) webview.current?.injectJavaScript(switchServerJs(switchTo));
+      if (switchTo) switchServer(webview, current.session, switchTo);
     } else if (msg.type === 'media') {
       current.session.onMedia({ url: msg.url, kind: msg.kind, frame: msg.frame, via: msg.via });
     }

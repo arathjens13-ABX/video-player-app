@@ -132,3 +132,22 @@ export function setDiscoverSite(id: string) {
     // Back to the first site next launch.
   }
 }
+
+const SUBTITLES_KEY = 'settings.subtitles';
+
+/** Whether saved subtitles show in the player (on unless switched off with the CC button). */
+export function getSubtitlesOn(): boolean {
+  try {
+    return Storage.getItemSync(SUBTITLES_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+export function setSubtitlesOn(on: boolean) {
+  try {
+    Storage.setItemSync(SUBTITLES_KEY, on ? 'on' : 'off');
+  } catch {
+    // Back to on next time.
+  }
+}
