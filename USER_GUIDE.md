@@ -97,6 +97,7 @@ Many AnimeXin episodes have a **Download** box under the player with **Mediafire
 
 The **Discover** tab reads AnimeXin (and Donghua Stream, Lucifer Donghua, AnimeKhor — pick one at the top) directly, so you don't have to hunt through web pages.
 
+- **Open … in the Browser** (under the site buttons) takes you to that site's own pages in the Browser tab. Long-pressing a site button does the same.
 - **Search** any show by name.
 - **New episodes**: the site's latest releases. **Today**: what airs today (AnimeXin's schedule). **Ongoing**: every ongoing show; scroll for more.
 - Tap a show to open its page: poster, details, description, and **every episode** with what you already have: **▶ Play** (downloaded), **Downloading** / **Queued**, or **⬇ Download** (one tap, using your usual server).

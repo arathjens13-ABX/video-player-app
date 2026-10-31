@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, useWindowDimensions } from 'react-native';
 
@@ -10,7 +11,14 @@ import type { Card, ScheduleDay, Section } from '@/lib/catalog/parse';
 import { SITES, siteById, type Site } from '@/lib/catalog/sites';
 import { checkFollowsNow } from '@/lib/follow-runner';
 import { useFollows } from '@/lib/hooks';
+import { requestOpenInBrowser } from '@/lib/open-in-browser';
 import { getDiscoverSite, setDiscoverSite } from '@/lib/settings';
+
+/** Shows a site's own pages in the Browser tab (to watch online, or use features Discover doesn't have). */
+function openSite(site: Site) {
+  requestOpenInBrowser(site.base);
+  router.navigate('/browser');
+}
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -152,11 +160,15 @@ export default function DiscoverScreen() {
               setResults(null);
               setSubmitted('');
             }}
+            onLongPress={() => openSite(s)}
             style={[styles.chip, { borderColor: colors.border, backgroundColor: s.id === site.id ? colors.tint : colors.card }]}>
             <Text style={{ color: s.id === site.id ? '#fff' : colors.text, fontWeight: '600', fontSize: 13 }}>{s.name}</Text>
           </Pressable>
         ))}
       </ScrollView>
+      <Pressable onPress={() => openSite(site)} hitSlop={6} style={styles.openSite} accessibilityRole="link">
+        <Text style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>Open {site.name} in the Browser ›</Text>
+      </Pressable>
       <TextInput
         value={query}
         onChangeText={(t) => {
@@ -288,6 +300,7 @@ function ErrorLine({ text, onRetry }: { text: string; onRetry: () => void }) {
 
 const styles = StyleSheet.create({
   chips: { paddingHorizontal: 16, paddingTop: 8, gap: 8 },
+  openSite: { alignSelf: 'flex-start', marginHorizontal: 16, marginTop: 10 },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
   search: { marginHorizontal: 16, marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 16 },
   heading: { fontSize: 18, fontWeight: '700' },
