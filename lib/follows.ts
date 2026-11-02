@@ -77,7 +77,8 @@ export function follow(series: Series): Follow {
     series.title,
     show,
     series.poster,
-    serverFor(series.url),
+    // Automatic: every server is tried, best first (lib/finder.ts serverOrder).
+    null,
     Math.min(getStreamQuality(), FOLLOW_QUALITY),
     JSON.stringify(series.episodes.map((e) => e.url)),
     Date.now(),

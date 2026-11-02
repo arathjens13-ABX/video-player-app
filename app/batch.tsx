@@ -49,7 +49,7 @@ export default function BatchScreen() {
   const [fromText, setFromText] = useState(range ? String(range.from) : '');
   const [toText, setToText] = useState(range ? String(range.to) : '');
   const [quality, setQuality] = useState<StreamQuality>(720);
-  const [useServer, setUseServer] = useState(!!draft?.server);
+  const [useServer, setUseServer] = useState(false);
   const server = useServer ? (draft?.server ?? null) : null;
   const added = useRef(false);
 
@@ -174,18 +174,16 @@ export default function BatchScreen() {
       </View>
 
       <Text style={styles.label}>Server</Text>
-      <Text>{server ?? 'Whatever the episode page plays first'}</Text>
+      <Text>{server ? `${server} first, then the others` : 'Automatic'}</Text>
+      <Text style={[styles.hint, { color: colors.muted }]}>
+        Each episode tries every server in turn (Dailymotion, Odysee, d.tube, Rumble, ok.ru, then All Sub with English subtitles and
+        MediaFire) and only fails if none of them works.
+      </Text>
       {draft.server ? (
         <Pressable onPress={() => setUseServer((v) => !v)} hitSlop={8}>
-          <Text style={[styles.link, { color: colors.tint }]}>
-            {useServer ? 'Use the page’s default player instead' : `Use ${draft.server}`}
-          </Text>
+          <Text style={[styles.link, { color: colors.tint }]}>{useServer ? 'Back to automatic' : `Try ${draft.server} first`}</Text>
         </Pressable>
-      ) : (
-        <Text style={[styles.hint, { color: colors.muted }]}>
-          To pick a server, switch to it on an episode page first, then come back to the episode list.
-        </Text>
-      )}
+      ) : null}
 
       <Text style={styles.label}>Space</Text>
       <View style={[styles.box, { backgroundColor: colors.card }]}>

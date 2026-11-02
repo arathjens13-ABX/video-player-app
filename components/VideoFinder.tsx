@@ -14,7 +14,7 @@ import { USER_AGENT } from '@/lib/ua';
 import { uploadProblem } from '@/lib/upload-check';
 
 /** How long a page gets in all, across every server tried (each gets PER_SERVER_MS). */
-const TIMEOUT_MS = 180_000;
+const TIMEOUT_MS = 360_000;
 /** How long to wait for the server list before using the page's default player. */
 const SERVERS_WAIT_MS = 8_000;
 

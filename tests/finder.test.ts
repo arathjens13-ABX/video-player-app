@@ -45,7 +45,8 @@ test('picks the episode once checks settle, preferring the quality choice', () =
 
 test('takes what it has once the settle time passes', () => {
   const s = new FinderSession(null);
-  s.onServers(servers);
+  s.onServers([servers[2]]); // a page with no mirror list: its own player
+  s.settleWithoutServers();
   s.onMedia(odyV1);
   s.onMedia(odyMaster);
   const status: Record<string, ProbeResult | 'pending'> = { [odyV1.url]: stream(1300), [odyMaster.url]: 'pending' };
@@ -106,7 +107,7 @@ const withSubs = (duration: number, langs: string[]): ProbeResult => ({
   info: { duration, qualities: [], encrypted: false, unsupportedEncryption: false, subtitles: langs.map((language) => ({ language })) },
 });
 
-test('server order: wanted, other English hardsubs, then All Sub; never cloud drives', () => {
+test('server order: wanted, English, unlabelled, then All Sub; best hosts first; never cloud drives', () => {
   assert.deepEqual(
     serverOrder(animexin, 'Hardsub English Ok.ru').map((s) => s.label),
     ['Hardsub English Ok.ru', 'Hardsub English Dailymotion', 'All Sub Player Dailymotion', 'All Sub Player Rumble']
@@ -114,6 +115,31 @@ test('server order: wanted, other English hardsubs, then All Sub; never cloud dr
   assert.deepEqual(
     serverOrder(animexin, null).map((s) => s.label),
     ['Hardsub English Dailymotion', 'Hardsub English Ok.ru', 'All Sub Player Dailymotion', 'All Sub Player Rumble']
+  );
+  // The full AnimeXin list: ok.ru goes after the hosts that have worked on phones.
+  const full = [
+    { label: 'Hardsub English Ok.ru AX', url: 'https://ok.ru/videoembed/9' },
+    { label: 'Hardsub English Rumble AX', url: 'https://rumble.com/embed/v9' },
+    { label: 'Hardsub English Odysee AX', url: 'https://odysee.com/$/embed/@a:1/b' },
+    { label: 'Hardsub English Dailymotion AX', url: 'https://geo.dailymotion.com/player/x.html?video=k9' },
+    { label: 'Hardsub English D.tube AX', url: 'https://play.d.tube/v/9' },
+  ];
+  assert.deepEqual(
+    serverOrder(full, null).map((s) => s.label.split(' ')[2]),
+    ['Dailymotion', 'Odysee', 'D.tube', 'Rumble', 'Ok.ru']
+  );
+  // Sites that name servers by host only are tried too; other languages never.
+  assert.deepEqual(
+    serverOrder(
+      [
+        { label: 'OK.ru', url: 'https://ok.ru/videoembed/1' },
+        { label: 'Vidara', url: 'https://vidara.to/e/1' },
+        { label: 'Dailymotion', url: 'https://www.dailymotion.com/embed/video/x1' },
+        { label: 'Sub Indo Dailymotion', url: 'https://www.dailymotion.com/embed/video/x2' },
+      ],
+      null
+    ).map((s) => s.label),
+    ['Dailymotion', 'Vidara', 'OK.ru']
   );
   assert.deepEqual(serverOrder([animexin[3], animexin[4], animexin[7]], null), []);
 });
@@ -163,4 +189,15 @@ test('Dailymotion ids and removed uploads', () => {
   assert.equal(dailymotionProblem({ error: { title: 'Private', status_code: 403 } }), 'not playable on Dailymotion');
   assert.equal(dailymotionProblem({ id: 'x9esgr0', title: 'ep 43' }), null);
   assert.equal(dailymotionProblem(null), null);
+});
+
+test('with no server picked, it starts on the best one and works down the list', () => {
+  const s = new FinderSession(null, 0);
+  assert.equal(s.onServers([animexin[7]]), null); // only the current player so far: wait
+  assert.equal(s.onServers(animexin), animexin[0].url); // Dailymotion first
+  assert.equal(s.moveOn(() => undefined, PER_SERVER_MS + 1), animexin[2].url); // then ok.ru
+  assert.equal(s.moveOn(() => undefined, 2 * PER_SERVER_MS + 2), animexin[1].url); // then All Sub
+  assert.equal(s.moveOn(() => undefined, 3 * PER_SERVER_MS + 3), animexin[5].url);
+  assert.equal(s.moveOn(() => undefined, 4 * PER_SERVER_MS + 4), 'none');
+  assert.equal(s.tried.length, 4);
 });

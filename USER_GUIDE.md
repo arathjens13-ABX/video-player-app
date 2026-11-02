@@ -100,7 +100,7 @@ The **Discover** tab reads AnimeXin (and Donghua Stream, Lucifer Donghua, AnimeK
 - **Open … in the Browser** (under the site buttons) takes you to that site's own pages in the Browser tab. Long-pressing a site button does the same.
 - **Search** any show by name.
 - **New episodes**: the site's latest releases. **Today**: what airs today (AnimeXin's schedule). **Ongoing**: every ongoing show; scroll for more.
-- Tap a show to open its page: poster, details, description, and **every episode** with what you already have: **▶ Play** (downloaded), **Downloading** / **Queued**, or **⬇ Download** (one tap, using your usual server).
+- Tap a show to open its page: poster, details, description, and **every episode** with what you already have: **▶ Play** (downloaded), **Downloading** / **Queued**, or **⬇ Download** (one tap; it tries each server in turn).
 - **Download several…** on a show's page opens the same range picker as in the Browser.
 - Pull down to refresh.
 - In the Library, a show you downloaded from one of these sites has **More episodes on AnimeXin** on its page.
@@ -110,7 +110,7 @@ The **Discover** tab reads AnimeXin (and Donghua Stream, Lucifer Donghua, AnimeK
 On a show's page in Discover, tap **+ Follow**.
 
 - VidStash checks followed shows for new episodes **when you open it**, **every 30 minutes while it's open**, and **in the background** when your iPhone allows it (iOS decides when; often a few times a day).
-- New episodes **download automatically** (up to 720p, on the server you last used on that site, never below 20 GB free). Turn this off per show on its page if you'd rather just be told.
+- New episodes **download automatically** (up to 720p, trying each server in turn, never below 20 GB free). Turn this off per show on its page if you'd rather just be told.
 - You get a **notification** for new episodes (allow notifications when asked). Background checks can only *find* new episodes; the download itself starts the next time you open VidStash.
 - Following doesn't download episodes that are already out: use **Download several…** for those.
 - Followed shows are listed at the top of Discover; **Check now** checks right away.
@@ -126,7 +126,8 @@ On a show's page in Discover, tap **+ Follow**.
 
 How it works and what to expect:
 
-- It uses the **server you last switched to** on that site (for example Dailymotion). If that server doesn't work for an episode (it isn't on the page, the upload was removed, or no video shows up within 40 seconds), it tries the episode's **other English hardsub servers**, then its **All Sub** servers. An All Sub video is only used if it has **English subtitles**, which are saved with it.
+- Each episode **tries every server in turn**, most dependable first: Dailymotion, Odysee, d.tube, Rumble, then ok.ru, then **All Sub** servers (only used if the video has **English subtitles**, which are saved with it). Each server gets 40 seconds; servers in other languages (Indonesian…) and cloud drives (Mega, Terabox) are skipped.
+- On the **Download several** screen you can choose **Try ⟨server⟩ first** (the one you last switched to in the Browser); the others are still tried after it.
 - If no server works, it uses the episode's **English MediaFire download** when the page has one (usually 1080p, about 170 MB for 20 minutes).
 - Dailymotion uploads that Dailymotion has removed are skipped straight away. If nothing works, the episode is marked **Not found** with the list of servers it tried and why each one failed.
 - Each episode's video is found right before it downloads, one at a time, so links don't expire while they wait. **Keep VidStash open** while it runs (the screen stays on).

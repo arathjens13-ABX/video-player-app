@@ -86,6 +86,9 @@ const MIGRATIONS: string[] = [
     lastNewAt INTEGER,
     lastError TEXT
   );`,
+  // Downloads no longer stick to the last server switched to in the Browser: they try every server, best first.
+  `UPDATE follows SET server = NULL;
+   UPDATE batch_items SET server = NULL WHERE status != 'finding';`,
 ];
 
 export const db = SQLite.openDatabaseSync('vidstash.db');

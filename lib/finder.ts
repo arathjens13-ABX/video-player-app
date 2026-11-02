@@ -38,27 +38,48 @@ export function sameServer(label: string, wanted: string): boolean {
 /** Hosts the finder can't get a video file from (cloud drives), and the "current player" pseudo-entry. */
 const NOT_FINDABLE = /\bmega\b|terabox|current player/i;
 
-/** "Hardsub English Ok.ru", "Hardsub Eng Rumble": subtitles burned into the picture. */
-export function isEnglishHardsub(label: string): boolean {
-  return /hard\s*-?\s*sub/i.test(label) && /\beng(lish)?\b/i.test(label);
-}
-
 /** "All Sub Player Dailymotion": one upload with selectable subtitles, English only sometimes. */
 export function isAllSub(label: string): boolean {
   return /\b(all|multi|soft)\s*-?\s*subs?\b/i.test(label);
 }
 
+/** Labels naming a subtitle language other than English ("Hardsub Indonesia", "Sub Español"). */
+const OTHER_LANGUAGE = /\b(indo(nesia|nesian)?|spanish|espa[nñ]ol|portugu[eê]se?|arabic|thai|vietnamese|viet|russian|french|fran[cç]ais|german|deutsch|turkish|malay|hindi|chinese|raw)\b/i;
+
 /**
- * Servers to try, in order, when the wanted one doesn't produce a video: the
- * wanted one, then other English hardsubs, then All Sub uploads (which only
- * count if they carry English subtitles).
+ * Hosts in the order they're tried: the ones whose downloads have played on a
+ * phone first. ok.ru comes last: its links are tied to the network you're on,
+ * and its videos are the least tested.
+ */
+const HOST_RANK: [RegExp, number][] = [
+  [/dailymotion/i, 0],
+  [/odysee/i, 1],
+  [/d\.?tube/i, 2],
+  [/rumble/i, 3],
+  [/ok\.ru|okru|odnoklassniki/i, 9],
+];
+
+function hostRank(s: Server): number {
+  const text = `${s.label} ${site(s.url) ?? ''}`;
+  return HOST_RANK.find(([re]) => re.test(text))?.[1] ?? 5;
+}
+
+/**
+ * Every server worth trying, in order: the wanted one (if given), then the
+ * English hardsubs, then servers whose label names no language, then All Sub
+ * uploads (which only count if they carry English subtitles). Within each
+ * group, the most dependable hosts first (HOST_RANK).
  */
 export function serverOrder(servers: Server[], wanted: string | null): Server[] {
   const usable = servers.filter((s) => !NOT_FINDABLE.test(s.label));
   const first = wanted
     ? (usable.find((s) => s.label.trim().toLowerCase() === wanted.trim().toLowerCase()) ?? usable.find((s) => sameServer(s.label, wanted)))
     : undefined;
-  const ordered = [...(first ? [first] : []), ...usable.filter((s) => isEnglishHardsub(s.label)), ...usable.filter((s) => isAllSub(s.label))];
+  const ranked = (list: Server[]) => list.map((s, i) => ({ s, i })).sort((a, b) => hostRank(a.s) - hostRank(b.s) || a.i - b.i).map(({ s }) => s);
+  const allSub = usable.filter((s) => isAllSub(s.label));
+  const english = usable.filter((s) => !isAllSub(s.label) && /\beng(lish)?\b/i.test(s.label));
+  const unmarked = usable.filter((s) => !isAllSub(s.label) && !/\beng(lish)?\b/i.test(s.label) && !OTHER_LANGUAGE.test(s.label));
+  const ordered = [...(first ? [first] : []), ...ranked(english), ...ranked(unmarked), ...ranked(allSub)];
   const seen = new Set<string>();
   return ordered.filter((s) => !seen.has(s.url) && !!seen.add(s.url));
 }
@@ -97,7 +118,6 @@ export class FinderSession {
   /** The server actually used, for messages ("page default" when the wanted one isn't on this page). */
   serverUsed: string | null = null;
   private servers: Server[] = [];
-  private order: Server[] | null = null;
   private attempt: Attempt | null = null;
   /** What happened on each server tried, for the message when none works. */
   readonly tried: string[] = [];
@@ -122,8 +142,8 @@ export class FinderSession {
     // The full mirror list can arrive after a first list holding only the current player,
     // so a missing server is only given up on by settleWithoutServers.
     if (this.wanted) return null;
-    this.begin(null, this.started);
-    return null;
+    const first = serverOrder(servers, null)[0];
+    return first ? this.begin(first, this.started) : null;
   }
 
   /**
@@ -171,8 +191,8 @@ export class FinderSession {
     const why = this.whyNot(attempt, status, now);
     if (!why) return null;
     this.tried.push(`${attempt.server?.label ?? 'the page’s player'} (${why})`);
-    this.order ??= serverOrder(this.servers, this.wanted);
-    const next = this.order.find((s) => !this.triedUrls.has(s.url));
+    // The list can grow after the first server was picked, so it's worked out again each time.
+    const next = serverOrder(this.servers, this.wanted).find((s) => !this.triedUrls.has(s.url));
     if (!next) {
       this.attempt = null;
       return 'none';

@@ -80,7 +80,7 @@ export default function SeriesScreen() {
 
   function download(e: SeasonEpisode<OnlineEpisode>) {
     if (!series) return;
-    addBatch([{ show: e.show, title: e.name, pageUrl: e.url, server: serverFor(series.url), maxHeight: getStreamQuality() }]);
+    addBatch([{ show: e.show, title: e.name, pageUrl: e.url, server: null, maxHeight: getStreamQuality() }]);
     setShowCover(e.show, series.poster, series.url);
     logInfo('catalog', `download ${e.show} ${e.name} from the show page`);
   }
@@ -175,7 +175,7 @@ export default function SeriesScreen() {
               <View style={{ flex: 1 }} lightColor="transparent" darkColor="transparent">
                 <Text style={{ fontWeight: '600' }}>Download new episodes automatically</Text>
                 <Text style={[styles.meta, { color: colors.muted }]}>
-                  At up to {following.maxHeight}p on {following.server ?? 'the page’s default player'}. You get a notification either way.
+                  At up to {following.maxHeight}p, trying {following.server ?? 'each server, best first'}. You get a notification either way.
                 </Text>
                 {following.lastError ? (
                   <Text style={[styles.meta, { color: colors.danger }]}>Last check failed: {following.lastError}</Text>
